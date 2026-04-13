@@ -55,7 +55,7 @@ function setup() {
             </article>
 
             <article class="settings-card">
-                <h3>OpenAI (Whisper / Images)</h3>
+                <h3>OpenAI (Whisper STT)</h3>
                 <input id="openaiMasked" readonly>
                 <div class="key-row">
                     <input id="openaiInput" type="password" placeholder="Paste OpenAI API key" autocomplete="off">

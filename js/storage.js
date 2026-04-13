@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
         openai: "",
         elevenlabs: ""
     },
+    imageDescriptors: {},
     sync: {
         lastExportAt: null,
         lastImportAt: null
@@ -96,7 +97,13 @@ export function ensureMigration() {
 }
 
 export function getSettings() {
-    return { ...DEFAULT_SETTINGS, ...read(KEYS.settings, DEFAULT_SETTINGS), apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...read(KEYS.settings, DEFAULT_SETTINGS).apiKeys } };
+    const saved = read(KEYS.settings, DEFAULT_SETTINGS);
+    return {
+        ...DEFAULT_SETTINGS,
+        ...saved,
+        apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...(saved.apiKeys || {}) },
+        imageDescriptors: { ...DEFAULT_SETTINGS.imageDescriptors, ...(saved.imageDescriptors || {}) }
+    };
 }
 
 export function saveSettings(settings) {

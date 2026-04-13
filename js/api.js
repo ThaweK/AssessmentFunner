@@ -2,7 +2,6 @@ import { debugLog } from "./debug.js";
 
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const OPENAI_STT_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
-const OPENAI_IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations";
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1/text-to-speech";
 
 async function fetchWithTimeout(url, options, timeoutMs = 45000) {
@@ -46,16 +45,20 @@ async function httpJSON(url, options, defaultError, timeoutMs = 45000, debugCont
     return response.json();
 }
 
-export async function askClaude({ apiKey, prompt, maxTokens = 2000, temperature = 0.2, debugContext = {} }) {
+export async function askClaude({ apiKey, prompt, messages, maxTokens = 2000, temperature = 0.2, debugContext = {} }) {
     if (!apiKey) {
         throw new Error("Anthropic API key is missing.");
     }
+    const requestMessages = Array.isArray(messages) && messages.length
+        ? messages
+        : [{ role: "user", content: prompt }];
     debugLog("api.askClaude", "Sending Claude request", {
         ...debugContext,
         model: "claude-sonnet-4-20250514",
         maxTokens,
         temperature,
-        prompt
+        messageCount: requestMessages.length,
+        prompt: Array.isArray(messages) ? "[multimodal-content]" : prompt
     });
     const data = await httpJSON(
         ANTHROPIC_ENDPOINT,
@@ -71,7 +74,7 @@ export async function askClaude({ apiKey, prompt, maxTokens = 2000, temperature 
                 model: "claude-sonnet-4-20250514",
                 max_tokens: maxTokens,
                 temperature,
-                messages: [{ role: "user", content: prompt }]
+                messages: requestMessages
             })
         },
         "Claude request failed",
@@ -125,44 +128,6 @@ export async function transcribeWithWhisper({ apiKey, audioBlob, language = "en"
         text: payload.text || ""
     });
     return payload.text || "";
-}
-
-export async function generateImageWithOpenAI({ apiKey, prompt, debugContext = {} }) {
-    if (!apiKey) {
-        throw new Error("OpenAI API key is missing.");
-    }
-    debugLog("api.generateImageWithOpenAI", "Sending image request", {
-        ...debugContext,
-        model: "gpt-image-1",
-        prompt
-    });
-    const data = await httpJSON(
-        OPENAI_IMAGE_ENDPOINT,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "gpt-image-1",
-                prompt,
-                size: "1024x1024"
-            })
-        },
-        "Image generation failed",
-        45000,
-        debugContext
-    );
-
-    const first = data.data?.[0];
-    const image = first?.b64_json ? `data:image/png;base64,${first.b64_json}` : null;
-    debugLog("api.generateImageWithOpenAI", "Image response received", {
-        ...debugContext,
-        hasImage: Boolean(image),
-        dataItems: data.data?.length || 0
-    });
-    return image;
 }
 
 export async function generateSpeechWithElevenLabs({ apiKey, text, voiceId, debugContext = {} }) {

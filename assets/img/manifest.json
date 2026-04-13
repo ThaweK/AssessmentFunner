@@ -1,0 +1,111 @@
+{
+  "version": "af-image-manifest-v1",
+  "updatedAt": "2026-04-13T09:09:47.578Z",
+  "images": {
+    "assets/img/aviation-apron-1.jpg": {
+      "model": "seed-manifest-v1",
+      "sceneSummary": "Airport apron scene with an aircraft and active ground-operation context.",
+      "operationalContext": "Useful for discussing stand operations, coordination, and risk control during busy surface activity.",
+      "hazards": [
+        "surface movement conflict risk",
+        "miscommunication between crew and ground services",
+        "time pressure during turnaround"
+      ],
+      "keyObjects": [
+        "aircraft",
+        "apron environment",
+        "ground operation area"
+      ],
+      "communicationFocus": [
+        "clear role assignment",
+        "timely readback",
+        "cross-team coordination"
+      ],
+      "questionSeeds": {
+        "part1Followups": [
+          "Which immediate priorities would you set before any movement starts?",
+          "What communication would you require to keep this operation safe?"
+        ],
+        "part4Followups": [
+          "Which risk here is most likely to escalate quickly, and why?",
+          "How would your crew briefing change if ramp congestion increases?",
+          "What callouts or confirmations are critical before continuing?"
+        ],
+        "part4Discussion": [
+          "How can pilots improve communication with ground teams under pressure?",
+          "When should schedule pressure be explicitly deprioritized for safety?"
+        ]
+      }
+    },
+    "assets/img/aviation-wing-1.jpg": {
+      "model": "seed-manifest-v1",
+      "sceneSummary": "In-flight perspective near an aircraft wing with external weather and route cues.",
+      "operationalContext": "Useful for discussing en-route monitoring, weather awareness, and strategic decision-making.",
+      "hazards": [
+        "changing weather exposure",
+        "route and separation monitoring load",
+        "late decision-making under uncertainty"
+      ],
+      "keyObjects": [
+        "wing view",
+        "outside weather cues",
+        "flight path environment"
+      ],
+      "communicationFocus": [
+        "ATC coordination for deviations",
+        "shared situational awareness in cockpit",
+        "clear intent statements"
+      ],
+      "questionSeeds": {
+        "part1Followups": [
+          "Which external cues would drive your next operational decision?",
+          "What information would you communicate first to ATC and your crew?"
+        ],
+        "part4Followups": [
+          "What would trigger a route or altitude change in this scenario?",
+          "How would you prioritize weather, fuel, and traffic constraints?",
+          "Which communication step prevents the most downstream risk?"
+        ],
+        "part4Discussion": [
+          "How should crews communicate uncertainty when conditions evolve quickly?",
+          "How can automation support but not replace weather-based judgment?"
+        ]
+      }
+    },
+    "assets/img/aviation-cockpit-1.jpg": {
+      "model": "seed-manifest-v1",
+      "sceneSummary": "Cockpit-focused scene centered on instrumentation, monitoring, and crew workload.",
+      "operationalContext": "Useful for discussing workload management, mode awareness, and disciplined communication.",
+      "hazards": [
+        "mode awareness errors",
+        "high cognitive workload",
+        "checklist and monitoring drift"
+      ],
+      "keyObjects": [
+        "cockpit instruments",
+        "flight controls",
+        "crew task environment"
+      ],
+      "communicationFocus": [
+        "concise closed-loop communication",
+        "task sharing",
+        "challenge-response discipline"
+      ],
+      "questionSeeds": {
+        "part1Followups": [
+          "What signs could indicate rising cockpit workload in this situation?",
+          "How would you divide tasks to maintain situational awareness?"
+        ],
+        "part4Followups": [
+          "What communication pattern best prevents mode confusion here?",
+          "How would you react if one key instrument indication became ambiguous?",
+          "Which cross-check should happen before executing the next action?"
+        ],
+        "part4Discussion": [
+          "How can crews keep communication efficient during high-workload phases?",
+          "Where is the balance between procedure discipline and rapid adaptation?"
+        ]
+      }
+    }
+  }
+}

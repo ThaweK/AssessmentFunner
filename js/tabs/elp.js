@@ -1,6 +1,7 @@
-import { askClaude, generateImageWithOpenAI, generateSpeechWithElevenLabs } from "../api.js";
+import { askClaude, generateSpeechWithElevenLabs } from "../api.js";
 import { debugLog } from "../debug.js";
 import { FLUENCY_TASKS } from "../fluency-data.js";
+import { buildPart1FollowupQuestions, buildPart4DiscussionQuestions, buildPart4FollowupQuestions, getImageDescriptor, getKnownLocalImageKeys } from "../image-context.js";
 import { KEYS, addPerformance, getHistory, getSettings, upsertDay } from "../storage.js";
 import { createLoadingOverlay, escapeHTML, getTodayString, isDevMode, randomPick } from "../utils.js";
 import { createPlaybackController, createRecorder } from "./elp-audio.js";
@@ -71,11 +72,26 @@ const DEFAULT_ICAO_SCORE = {
     overall: 3
 };
 
-const STATIC_IMAGES = [
+const DEFAULT_LOCAL_IMAGE_LIBRARY = Object.freeze({
+    single: [
+        "assets/img/aviation-apron-1.jpg",
+        "assets/img/aviation-wing-1.jpg",
+        "assets/img/aviation-cockpit-1.jpg"
+    ],
+    compare: [
+        "assets/img/aviation-apron-1.jpg",
+        "assets/img/aviation-wing-1.jpg",
+        "assets/img/aviation-cockpit-1.jpg"
+    ]
+});
+
+const REMOTE_IMAGE_FALLBACK = Object.freeze([
     "https://images.pexels.com/photos/62623/wing-plane-flying-airplane-62623.jpeg",
     "https://images.pexels.com/photos/358319/pexels-photo-358319.jpeg",
     "https://images.pexels.com/photos/912050/pexels-photo-912050.jpeg"
-];
+]);
+
+const imageLoadCache = new Map();
 
 const BURST_TEXTS = {
     set1: [
@@ -212,13 +228,13 @@ function extractJSON(text) {
 function getOfflineWarning() {
     const keys = getSettings().apiKeys;
     const missing = [];
-    if (!keys.anthropic) missing.push("Anthropic (questions, analysis, scoring)");
-    if (!keys.openai) missing.push("OpenAI (speech-to-text, images)");
+    if (!keys.anthropic) missing.push("Anthropic (questions, image context, analysis, scoring)");
+    if (!keys.openai) missing.push("OpenAI (speech-to-text)");
     if (!keys.elevenlabs) missing.push("ElevenLabs (audio stories)");
     if (!missing.length) return "";
     return `<div class="elp-offline-banner">
         <strong>Offline mode</strong> \u2014 using static fallback content. Missing API keys: ${missing.join(", ")}.
-        Configure them in the Settings tab for AI-generated content.
+        Configure them in the Settings tab for AI-assisted content.
     </div>`;
 }
 
@@ -459,18 +475,50 @@ async function buildPart2Story(label) {
 }
 
 async function ensurePicture(type) {
-    const openaiKey = getSettings().apiKeys.openai;
-    if (!openaiKey) return randomPick(STATIC_IMAGES);
-    try {
-        const prompt = type === "compare"
-            ? "realistic professional photograph of aircraft pushback operation at dusk, airport apron, no text"
-            : "realistic professional photograph of non-normal aviation operation, airport emergency response, no text";
-        return (await generateImageWithOpenAI({
-            apiKey: openaiKey,
-            prompt,
-            debugContext: { tab: "elp", operation: "ensurePicture", type }
-        })) || randomPick(STATIC_IMAGES);
-    } catch { return randomPick(STATIC_IMAGES); }
+    const defaultPool = type === "compare" ? DEFAULT_LOCAL_IMAGE_LIBRARY.compare : DEFAULT_LOCAL_IMAGE_LIBRARY.single;
+    const preferred = await getKnownLocalImageKeys(defaultPool);
+    const verified = await Promise.all(preferred.map(async (src) => ({ src, ok: await canLoadImage(src) })));
+    const availableLocal = verified.filter((item) => item.ok).map((item) => item.src);
+    if (availableLocal.length) {
+        return randomPick(availableLocal);
+    }
+    debugLog("elp.ensurePicture", "Local image pool unavailable, using remote fallback.", {
+        tab: "elp",
+        type,
+        attempted: preferred
+    }, "warn");
+    return randomPick(REMOTE_IMAGE_FALLBACK);
+}
+
+function canLoadImage(src, timeoutMs = 3500) {
+    if (imageLoadCache.has(src)) return imageLoadCache.get(src);
+
+    const promise = new Promise((resolve) => {
+        const img = new Image();
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            resolve(false);
+        }, timeoutMs);
+
+        img.onload = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(true);
+        };
+        img.onerror = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+        };
+        img.src = src;
+    });
+
+    imageLoadCache.set(src, promise);
+    return promise;
 }
 
 async function recordAndTranscribe(label) {
@@ -550,18 +598,22 @@ async function runCurrentState() {
         case "PART1_PICTURE": {
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Loading aviation image\u2026");
             const picture = await ensurePicture("single");
+            const pictureContext = await getImageDescriptor(picture, { debugContext: { tab: "elp", state: "PART1_PICTURE" } });
             loader.remove();
             renderMain(`<h3>${isDev ? "Part 1 Picture" : "Describe This Scene"}</h3><img class="elp-picture" src="${picture}" alt="aviation scenario">`);
-            saveElpPatch({ part1Picture: picture });
+            saveElpPatch({ part1Picture: picture, part1PictureContext: pictureContext });
             break;
         }
 
         case "PART1_FOLLOWUPS": {
             const pic = savedPicture("part1Picture");
-            const questions = [
-                "What immediate priorities do you identify in this scenario?",
-                "How would communication change if passenger stress escalates?"
-            ];
+            const day = getTodayElp() || {};
+            let context = day.part1PictureContext || null;
+            if (!context && day.part1Picture) {
+                context = await getImageDescriptor(day.part1Picture, { debugContext: { tab: "elp", state: "PART1_FOLLOWUPS" } });
+                saveElpPatch({ part1PictureContext: context });
+            }
+            const questions = buildPart1FollowupQuestions(context);
             if (isDev) {
                 renderMain(`<h3>Part 1 Follow-ups</h3>${pic}<ul>${questions.map((q) => `<li>${q}</li>`).join("")}</ul>`);
             } else {
@@ -740,33 +792,60 @@ async function runCurrentState() {
         case "PART4_PICTURE1": {
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Loading aviation image\u2026");
             const picture1 = await ensurePicture("single");
+            const picture1Context = await getImageDescriptor(picture1, { debugContext: { tab: "elp", state: "PART4_PICTURE1" } });
             loader.remove();
             renderMain(`<h3>${isDev ? "Part 4 Picture 1" : "Study This Image"}</h3><img class="elp-picture" src="${picture1}" alt="aviation scenario">`);
-            saveElpPatch({ part4Picture1: picture1 });
+            saveElpPatch({ part4Picture1: picture1, part4Picture1Context: picture1Context });
             break;
         }
 
         case "PART4_PICTURE2_COMPARE": {
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Loading comparison image\u2026");
-            const picture2 = await ensurePicture("compare");
+            const picture1 = getTodayElp()?.part4Picture1 || await ensurePicture("single");
+            let picture2 = await ensurePicture("compare");
+            if (picture2 === picture1) {
+                const allCompare = await getKnownLocalImageKeys(DEFAULT_LOCAL_IMAGE_LIBRARY.compare);
+                const alternatives = allCompare.filter((src) => src !== picture1);
+                if (alternatives.length) {
+                    const verified = await Promise.all(alternatives.map(async (src) => ({ src, ok: await canLoadImage(src) })));
+                    const availableAlternatives = verified.filter((item) => item.ok).map((item) => item.src);
+                    if (availableAlternatives.length) picture2 = randomPick(availableAlternatives);
+                }
+            }
+            const [picture1Context, picture2Context] = await Promise.all([
+                getImageDescriptor(picture1, { debugContext: { tab: "elp", state: "PART4_PICTURE2_COMPARE", role: "picture1" } }),
+                getImageDescriptor(picture2, { debugContext: { tab: "elp", state: "PART4_PICTURE2_COMPARE", role: "picture2" } })
+            ]);
             loader.remove();
-            const picture1 = getTodayElp()?.part4Picture1 || randomPick(STATIC_IMAGES);
             if (isDev) {
                 renderMain(`<h3>Part 4 Compare</h3><div class="elp-controls"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div><p>Describe similarities and differences in operational context.</p>`);
             } else {
                 renderMain(`<h3>Compare These Two Scenes</h3><div class="elp-compare"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>`);
             }
-            saveElpPatch({ part4Picture2: picture2 });
+            saveElpPatch({
+                part4Picture1: picture1,
+                part4Picture2: picture2,
+                part4Picture1Context: picture1Context,
+                part4Picture2Context: picture2Context
+            });
             break;
         }
 
         case "PART4_FOLLOWUPS": {
             const pics = savedPicturePair();
-            const questions = [
-                "Which difference has highest safety impact and why?",
-                "How would your crew briefing differ between the two scenarios?",
-                "If weather worsens, what decision threshold changes?"
-            ];
+            const day = getTodayElp() || {};
+            let picture1Context = day.part4Picture1Context || null;
+            let picture2Context = day.part4Picture2Context || null;
+            if (!picture1Context && day.part4Picture1) {
+                picture1Context = await getImageDescriptor(day.part4Picture1, { debugContext: { tab: "elp", state: "PART4_FOLLOWUPS", role: "picture1" } });
+            }
+            if (!picture2Context && day.part4Picture2) {
+                picture2Context = await getImageDescriptor(day.part4Picture2, { debugContext: { tab: "elp", state: "PART4_FOLLOWUPS", role: "picture2" } });
+            }
+            if (picture1Context || picture2Context) {
+                saveElpPatch({ part4Picture1Context: picture1Context, part4Picture2Context: picture2Context });
+            }
+            const questions = buildPart4FollowupQuestions(picture1Context, picture2Context);
             if (isDev) {
                 renderMain(`<h3>Part 4 Follow-ups</h3>${pics}<ul>${questions.map((q) => `<li>${q}</li>`).join("")}</ul>`);
             } else {
@@ -777,10 +856,19 @@ async function runCurrentState() {
 
         case "PART4_DISCUSSION": {
             const pics = savedPicturePair();
-            const questions = [
-                "How should pilots adapt communication style in multicultural operations?",
-                "Where does automation help most and where can it degrade situational awareness?"
-            ];
+            const day = getTodayElp() || {};
+            let picture1Context = day.part4Picture1Context || null;
+            let picture2Context = day.part4Picture2Context || null;
+            if (!picture1Context && day.part4Picture1) {
+                picture1Context = await getImageDescriptor(day.part4Picture1, { debugContext: { tab: "elp", state: "PART4_DISCUSSION", role: "picture1" } });
+            }
+            if (!picture2Context && day.part4Picture2) {
+                picture2Context = await getImageDescriptor(day.part4Picture2, { debugContext: { tab: "elp", state: "PART4_DISCUSSION", role: "picture2" } });
+            }
+            if (picture1Context || picture2Context) {
+                saveElpPatch({ part4Picture1Context: picture1Context, part4Picture2Context: picture2Context });
+            }
+            const questions = buildPart4DiscussionQuestions(picture1Context, picture2Context);
             if (isDev) {
                 renderMain(`<h3>Part 4 Discussion</h3>${pics}<ul>${questions.map((q) => `<li>${q}</li>`).join("")}</ul>`);
             } else {
