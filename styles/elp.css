@@ -1,0 +1,293 @@
+/* === Mode visibility === */
+.elp-production .elp-state,
+.elp-production .elp-dev-controls,
+.elp-production #audioLog,
+.elp-production audio {
+    display: none !important;
+}
+.elp-dev .elp-progress,
+.elp-dev .elp-instruction,
+.elp-dev .elp-action-area {
+    display: none !important;
+}
+
+/* === State badge (dev only) === */
+.elp-state {
+    display: inline-block;
+    margin-bottom: 10px;
+    border-radius: 999px;
+    background: #083344;
+    color: #fff;
+    padding: 5px 12px;
+    font-size: 0.85rem;
+}
+
+/* === ELP header === */
+.elp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+/* === ELP card spacing === */
+.elp-card {
+    padding: 24px;
+}
+.elp-card h2 {
+    margin-bottom: 0;
+}
+.elp-card h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+/* === Progress bar === */
+.elp-progress {
+    margin-bottom: 16px;
+}
+.progress-label {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--brand-strong);
+    margin-bottom: 6px;
+}
+.progress-bar-track {
+    height: 8px;
+    background: var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%;
+    background: var(--brand);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+.progress-step {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 4px;
+}
+
+/* === Instruction banner === */
+.elp-instruction {
+    background: #f0f7ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: var(--text);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+/* === Action area === */
+.elp-action-area {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+.btn-lg {
+    padding: 14px 32px;
+    font-size: 1.05rem;
+    border-radius: 10px;
+}
+
+/* === Dev controls === */
+.elp-dev-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* === Shared controls row === */
+.elp-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* === Picture === */
+.elp-picture {
+    width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #e2e8f0;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+.elp-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 12px 0;
+}
+.elp-compare .elp-picture {
+    margin: 0;
+}
+
+/* Reference image shown alongside questions */
+.elp-picture-ref {
+    max-height: 200px;
+    opacity: 0.92;
+}
+
+/* === Audio log (dev) === */
+.audio-log {
+    margin-top: 8px;
+    font-size: 0.92rem;
+}
+
+/* === Recording UI === */
+.recording-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.rec-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: var(--bad);
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: rec-pulse 1s infinite;
+}
+@keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+.rec-timer {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--brand-strong);
+}
+
+/* === Loading / processing === */
+.elp-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 1rem;
+}
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--line);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* === Scorecard === */
+.scorecard {
+    max-width: 500px;
+    margin: 0 auto;
+}
+.score-grid {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+}
+.score-item {
+    display: grid;
+    grid-template-columns: 140px 40px 1fr;
+    align-items: center;
+    gap: 10px;
+}
+.score-label {
+    font-weight: 600;
+    color: var(--text);
+}
+.score-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--brand-strong);
+    text-align: center;
+}
+.score-bar {
+    height: 8px;
+    background: var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.score-bar-fill {
+    height: 100%;
+    background: var(--ok);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+.score-overall {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    text-align: center;
+}
+.score-overall-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.score-overall-value {
+    display: block;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--brand-strong);
+    line-height: 1.2;
+}
+.score-overall-desc {
+    display: block;
+    font-size: 1rem;
+    color: var(--ok);
+    font-weight: 600;
+}
+
+/* === Production question lists === */
+.elp-questions {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0;
+    display: grid;
+    gap: 10px;
+}
+.elp-questions li {
+    background: #f8fbff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 16px;
+    line-height: 1.5;
+}
+
+/* === Responsive === */
+@media (max-width: 620px) {
+    .elp-compare {
+        grid-template-columns: 1fr;
+    }
+    .score-item {
+        grid-template-columns: 100px 30px 1fr;
+    }
+    .elp-card {
+        padding: 16px;
+    }
+}

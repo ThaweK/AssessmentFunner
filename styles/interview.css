@@ -1,0 +1,17 @@
+.interview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 10px;
+}
+.interview-card {
+    border: 1px solid #d8e1ec;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fcfffb;
+}
+.sample-answer {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    background: #f1f5f9;
+}

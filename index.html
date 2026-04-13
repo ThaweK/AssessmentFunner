@@ -3,156 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assessment Funner - Daily Practice Generator</title>
+    <title>Assessment Funner Platform</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles/psychomotor.css">
+    <link rel="stylesheet" href="styles/technical.css">
+    <link rel="stylesheet" href="styles/elp.css">
+    <link rel="stylesheet" href="styles/interview.css">
+    <link rel="stylesheet" href="styles/settings.css">
+    <link rel="stylesheet" href="styles/analytics.css">
 </head>
 <body>
-    <!-- Password Gate -->
     <div class="password-gate" id="passwordGate">
         <div class="password-card">
             <h1>Assessment Funner</h1>
-            <p>Please enter the password to continue</p>
+            <p>Enter password to access your training workspace.</p>
             <div class="password-input-group">
-                <input type="password" id="passwordInput" placeholder="Enter password..." />
+                <input type="password" id="passwordInput" placeholder="Password">
                 <button id="passwordSubmit" class="btn btn-primary">Enter</button>
             </div>
-            <p class="password-error" id="passwordError"></p>
+            <p id="passwordError" class="password-error"></p>
         </div>
     </div>
 
-    <div class="container" id="mainContent" style="display: none;">
-        <header>
-            <h1>Assessment Funner</h1>
-            <p class="date-display" id="currentDate"></p>
+    <div id="app" class="app-shell" hidden>
+        <header class="app-header">
+            <div>
+                <h1>Assessment Funner</h1>
+                <p id="currentDate" class="date-display"></p>
+            </div>
+            <div class="header-actions">
+                <button id="runDailyAll" class="btn btn-primary">Generate Today Across Tabs</button>
+            </div>
         </header>
 
+        <nav class="tab-nav" aria-label="Main tabs">
+            <button class="tab-btn active" data-tab="psychomotor">Psychomotor</button>
+            <button class="tab-btn" data-tab="technical">Technical</button>
+            <button class="tab-btn" data-tab="elp">ELP</button>
+            <button class="tab-btn" data-tab="interview">Interview</button>
+            <button class="tab-btn" data-tab="analytics">Analytics</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+
         <main>
-            <!-- Practical Exam Numbers Section -->
-            <section class="card">
-                <h2>📝 Practical Exam Numbers</h2>
-                <p class="section-subtitle">Record your score and time after completing each test</p>
-                <div class="exam-grid" id="examNumbers">
-                    <div class="exam-item">
-                        <span class="exam-label">Aptitude Tests (4/8)</span>
-                        <span class="exam-value" id="aptitude">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">Deductive Test (1/3)</span>
-                        <span class="exam-value" id="deductive">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">Inductive Logical Thinking (1/2)</span>
-                        <span class="exam-value" id="inductiveThinking">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">Inductive Logical Reasoning (2/4)</span>
-                        <span class="exam-value" id="inductiveReasoning">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">Knowledge Tests (1/5)</span>
-                        <span class="exam-value" id="knowledge">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">English Audio Tests (1/8)</span>
-                        <span class="exam-value" id="englishAudio">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">Complete the Sentence (6/60)</span>
-                        <span class="exam-value" id="completeSentence">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">English Grammar (4/19)</span>
-                        <span class="exam-value" id="englishGrammar">-</span>
-                    </div>
-                    <div class="exam-item">
-                        <span class="exam-label">English Vocabulary (4/36)</span>
-                        <span class="exam-value" id="englishVocabulary">-</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ATPL Questions Section -->
-            <section class="card">
-                <h2>✈️ EASA ATPL Questions of the Day <span class="ai-badge">AI Generated</span></h2>
-                <div class="atpl-config">
-                    <label>Number of questions:</label>
-                    <div class="atpl-count-selector">
-                        <button class="count-btn" data-count="2">2</button>
-                        <button class="count-btn" data-count="3">3</button>
-                        <button class="count-btn active" data-count="4">4</button>
-                        <button class="count-btn" data-count="5">5</button>
-                        <button class="count-btn" data-count="6">6</button>
-                    </div>
-                    <span class="atpl-config-note">(Last question is always descriptive)</span>
-                </div>
-                <p class="section-subtitle">Select your answer, then see if you're correct - Based on EASA regulations</p>
-                <div class="atpl-questions" id="atplQuestions">
-                    <div class="atpl-item" id="atpl1">
-                        <div class="atpl-placeholder">Click "Generate Today's Practice" to get AI-generated ATPL questions</div>
-                    </div>
-                    <div class="atpl-item" id="atpl2">
-                        <div class="atpl-placeholder">-</div>
-                    </div>
-                    <div class="atpl-item" id="atpl3">
-                        <div class="atpl-placeholder">-</div>
-                    </div>
-                    <div class="atpl-item" id="atpl4">
-                        <div class="atpl-placeholder">-</div>
-                    </div>
-                </div>
-                <div class="atpl-loading" id="atplLoading" style="display: none;">
-                    <div class="spinner"></div>
-                    <p>Generating unique ATPL questions with AI...</p>
-                </div>
-            </section>
-
-            <!-- English Fluency Task Section -->
-            <section class="card">
-                <h2>🗣️ English Fluency Task</h2>
-                <div class="fluency-task" id="fluencyTask">
-                    <div class="task-type" id="taskType">-</div>
-                    <div class="task-content" id="taskContent">-</div>
-                    <div class="fluency-notes-container" id="fluencyNotesContainer" style="display: none;">
-                        <label>Your notes/response:</label>
-                        <textarea id="fluencyNotes" placeholder="Write your practice notes here..." rows="4"></textarea>
-                        <button id="saveFluencyNotes" class="btn btn-small">Save Notes</button>
-                        <span id="fluencyNotesSaved" class="saved-indicator"></span>
-                    </div>
-                    <div class="task-tips" id="taskTips"></div>
-                </div>
-            </section>
-
-            <!-- Controls -->
-            <div class="controls">
-                <button id="generateBtn" class="btn btn-primary">Generate Today's Practice</button>
-                <button id="resetBtn" class="btn btn-secondary">Reset History</button>
-            </div>
-
-            <!-- Performance Analytics Section -->
-            <section class="card performance-card" id="performancePanel">
-                <h2 onclick="togglePerformancePanel()" class="collapsible-header">
-                    📊 Performance Analytics
-                    <span class="collapse-icon">▼</span>
-                </h2>
-                <div class="performance-content" id="performanceContent">
-                    <p class="no-history">Click to view your performance analytics</p>
-                </div>
-            </section>
-
-            <!-- History Section -->
-            <section class="card history-card">
-                <h2>📅 Generation History</h2>
-                <div class="history-list" id="historyList">
-                    <p class="no-history">No history yet</p>
-                </div>
-            </section>
+            <section class="tab-panel active" id="tab-psychomotor"></section>
+            <section class="tab-panel" id="tab-technical"></section>
+            <section class="tab-panel" id="tab-elp"></section>
+            <section class="tab-panel" id="tab-interview"></section>
+            <section class="tab-panel" id="tab-analytics"></section>
+            <section class="tab-panel" id="tab-settings"></section>
         </main>
-
-        <footer>
-            <p>Practice makes perfect! Keep going! 💪</p>
-        </footer>
+        <section id="debugPanel" hidden></section>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

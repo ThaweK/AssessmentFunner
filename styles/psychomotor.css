@@ -1,0 +1,25 @@
+.pm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px;
+}
+.pm-item {
+    background: #f7fafc;
+    border: 1px solid #d8e1ec;
+    border-radius: 8px;
+    padding: 10px;
+}
+.pm-label {
+    font-weight: 600;
+}
+.pm-num {
+    font-family: Consolas, monospace;
+    font-size: 1.05rem;
+    color: #155e75;
+}
+.pm-score-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 74px;
+    gap: 6px;
+    margin-top: 6px;
+}
