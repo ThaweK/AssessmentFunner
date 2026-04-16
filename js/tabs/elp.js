@@ -120,6 +120,8 @@ let busy = false;
 let recorder;
 let playback;
 let audioEl;
+let initialized = false;
+let renderedMode = null;
 
 const runtime = {
     transcripts: [],
@@ -132,6 +134,19 @@ const runtime = {
     story: { sub1: null, sub2: null }
 };
 
+const PLAY_STATE_TO_STORY_KEY = Object.freeze({
+    PART2_SUB1_PLAY: "sub1",
+    PART2_SUB2_PLAY: "sub2"
+});
+
+const RECORD_STATE_TO_LABEL = Object.freeze({
+    PART2_SUB1_DESCRIBE: "part2_sub1_description",
+    PART2_SUB2_DESCRIBE: "part2_sub2_description",
+    PART3_SET1_DESCRIBE: "part3_set1_describe",
+    PART3_SET2_DESCRIBE: "part3_set2_describe",
+    PART3_SET3_DESCRIBE: "part3_set3_describe"
+});
+
 /* ── Helpers ── */
 
 function getTodayElp() {
@@ -140,6 +155,26 @@ function getTodayElp() {
 }
 
 function dev() { return isDevMode(); }
+
+function isRecordState(stateName = state) {
+    return STATE_META[stateName]?.auto === "record";
+}
+
+function isProcessState(stateName = state) {
+    return STATE_META[stateName]?.auto === "process";
+}
+
+function getPlayableStoryKey(stateName = state) {
+    return PLAY_STATE_TO_STORY_KEY[stateName] || null;
+}
+
+function isPlayState(stateName = state) {
+    return Boolean(getPlayableStoryKey(stateName));
+}
+
+function getRecordLabelForState(stateName = state) {
+    return RECORD_STATE_TO_LABEL[stateName] || stateName.toLowerCase();
+}
 
 function setState(next) {
     const previous = state;
@@ -166,11 +201,14 @@ function setState(next) {
     if (instrEl && meta) {
         instrEl.textContent = meta.instruction;
     }
+
+    updateDevControls();
 }
 
 function setBusy(isBusy) {
     busy = isBusy;
     root.querySelectorAll("button:not(.btn-stop)").forEach((btn) => { btn.disabled = isBusy; });
+    updateDevControls();
 }
 
 function saveElpPatch(patch) {
@@ -295,6 +333,86 @@ function savedPicturePair() {
     const p2 = getTodayElp()?.part4Picture2;
     if (!p1 && !p2) return "";
     return `<div class="elp-compare">${p1 ? `<img class="elp-picture elp-picture-ref" src="${p1}" alt="picture 1">` : ""}${p2 ? `<img class="elp-picture elp-picture-ref" src="${p2}" alt="picture 2">` : ""}</div>`;
+}
+
+function renderTranscriptPrompt(title, transcript, hint, extra = "") {
+    return `
+        <h3>${escapeHTML(title)}</h3>
+        <p class="hint">${escapeHTML(hint)}</p>
+        ${transcript ? `<p><strong>Transcript:</strong> ${escapeHTML(transcript)}</p>` : "<p class=\"hint\">No transcript captured yet.</p>"}
+        ${extra}
+    `;
+}
+
+function renderAnalysisDetails(title, analysis, emptyHint) {
+    if (!analysis) {
+        return `<h3>${escapeHTML(title)}</h3><p class="hint">${escapeHTML(emptyHint)}</p>`;
+    }
+
+    return `
+        <h3>${escapeHTML(title)}</h3>
+        <p><strong>Covered:</strong> ${(analysis.covered || []).map(escapeHTML).join(", ") || "none"}</p>
+        <p><strong>Missed:</strong> ${(analysis.missed || []).map(escapeHTML).join(", ") || "none"}</p>
+        ${(analysis.followUps || []).length ? `<p><strong>Follow-ups:</strong> ${(analysis.followUps || []).map(escapeHTML).join(" | ")}</p>` : ""}
+    `;
+}
+
+function renderScoreDetails(score) {
+    if (!score) {
+        return `<h3>ICAO Score</h3><p class="hint">Use the developer action button to calculate the current score.</p>`;
+    }
+
+    return `
+        <h3>ICAO Score</h3>
+        <p>Pronunciation: ${score.pronunciation}</p><p>Structure: ${score.structure}</p><p>Vocabulary: ${score.vocabulary}</p>
+        <p>Fluency: ${score.fluency}</p><p>Comprehension: ${score.comprehension}</p><p>Interactions: ${score.interactions}</p>
+        <p><strong>Overall: ${score.overall}</strong></p><p class="hint">${escapeHTML(score.rationale || "")}</p>
+    `;
+}
+
+function updateModeClass() {
+    const card = root?.querySelector(".elp-card");
+    if (!card) return;
+    const isDev = dev();
+    card.classList.toggle("elp-dev", isDev);
+    card.classList.toggle("elp-production", !isDev);
+    renderedMode = isDev ? "dev" : "production";
+}
+
+function updateDevControls() {
+    const controls = root?.querySelector("#elpDevControls");
+    if (!controls) return;
+
+    const isDev = dev();
+    controls.hidden = !isDev;
+    if (!isDev) return;
+
+    const runBtn = root.querySelector("#elpStart");
+    const prevBtn = root.querySelector("#elpPrev");
+    const nextBtn = root.querySelector("#elpNext");
+    const recordBtn = root.querySelector("#elpRecord");
+    const playBtn = root.querySelector("#elpPlay");
+
+    const showRunButton = state === "IDLE" || isProcessState() || (!isPlayState() && !isRecordState());
+    runBtn.hidden = !showRunButton;
+    runBtn.textContent = state === "IDLE"
+        ? "Start Exam"
+        : state === "SCORING"
+            ? "Calculate Score"
+            : isProcessState()
+                ? "Run Analysis"
+                : "Refresh Step";
+
+    prevBtn.disabled = busy || STATES.indexOf(state) <= 0;
+    nextBtn.disabled = busy || STATES.indexOf(state) >= STATES.length - 1;
+
+    recordBtn.hidden = !isRecordState();
+    recordBtn.disabled = busy;
+
+    const storyKey = getPlayableStoryKey();
+    const canPlayCurrentStory = Boolean(storyKey && runtime.story[storyKey]?.audioSrc);
+    playBtn.hidden = !isPlayState() || !canPlayCurrentStory;
+    playBtn.disabled = busy || !canPlayCurrentStory;
 }
 
 /* ── Action area (production controls) ── */
@@ -602,11 +720,24 @@ async function analyzePart2(label, transcript) {
     } catch { return { covered: [], missed: runtime.pinpoints[label], followUps: [] }; }
 }
 
+async function recordCurrentDevAnswer() {
+    if (!isRecordState()) {
+        alert("Recording is only available in response states.");
+        return;
+    }
+
+    const transcript = await recordAndTranscribe(getRecordLabelForState());
+    const patch = buildTranscriptPatch(state, transcript);
+    saveElpPatch(patch);
+    renderMain(renderTranscriptPrompt(STATE_META[state]?.label || state, transcript, "Transcript captured for this step."));
+}
+
 /* ── State machine renderer ── */
 
-async function runCurrentState() {
+async function runCurrentState(options = {}) {
+    const executeDevAction = options.executeDevAction === true;
     const isDev = dev();
-    debugLog("elp.runCurrentState", "Rendering state", { tab: "elp", state, isDev });
+    debugLog("elp.runCurrentState", "Rendering state", { tab: "elp", state, isDev, executeDevAction });
 
     switch (state) {
         case "IDLE": {
@@ -690,9 +821,12 @@ async function runCurrentState() {
 
         case "PART2_SUB1_DESCRIBE": {
             if (isDev) {
-                const transcript = await recordAndTranscribe("part2_sub1_description");
-                renderMain(`<h3>Sub-part 1 Description</h3><p>${escapeHTML(transcript)}</p>`);
-                saveElpPatch({ part2Sub1Transcript: transcript });
+                const transcript = getTodayElp()?.part2Sub1Transcript || "";
+                if (executeDevAction) {
+                    await recordCurrentDevAnswer();
+                } else {
+                    renderMain(renderTranscriptPrompt("Sub-part 1 Description", transcript, "Use the developer Record button to capture this response."));
+                }
             } else {
                 renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
             }
@@ -700,12 +834,18 @@ async function runCurrentState() {
         }
 
         case "PART2_SUB1_ANALYZE": {
+            if (isDev) {
+                if (!executeDevAction) {
+                    renderMain(renderAnalysisDetails("Sub-part 1 Pinpoint Analysis", getTodayElp()?.part2Sub1Analysis, "Use the developer action button to analyze the saved transcript."));
+                    break;
+                }
+            }
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const transcript = getTodayElp()?.part2Sub1Transcript || getTodayElp()?.lastTranscript?.transcript || "";
             const analysis = await analyzePart2("sub1", transcript);
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Sub-part 1 Pinpoint Analysis</h3><p><strong>Covered:</strong> ${(analysis.covered || []).map(escapeHTML).join(", ") || "none"}</p><p><strong>Missed:</strong> ${(analysis.missed || []).map(escapeHTML).join(", ") || "none"}</p>`);
+                renderMain(renderAnalysisDetails("Sub-part 1 Pinpoint Analysis", analysis, "No analysis result."));
             }
             saveElpPatch({ part2Sub1Analysis: analysis });
             if (!isDev) {
@@ -760,9 +900,12 @@ async function runCurrentState() {
 
         case "PART2_SUB2_DESCRIBE": {
             if (isDev) {
-                const transcript = await recordAndTranscribe("part2_sub2_description");
-                renderMain(`<h3>Sub-part 2 Description</h3><p>${escapeHTML(transcript)}</p>`);
-                saveElpPatch({ part2Sub2Transcript: transcript });
+                const transcript = getTodayElp()?.part2Sub2Transcript || "";
+                if (executeDevAction) {
+                    await recordCurrentDevAnswer();
+                } else {
+                    renderMain(renderTranscriptPrompt("Sub-part 2 Description", transcript, "Use the developer Record button to capture this response."));
+                }
             } else {
                 renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
             }
@@ -770,12 +913,18 @@ async function runCurrentState() {
         }
 
         case "PART2_SUB2_ANALYZE": {
+            if (isDev) {
+                if (!executeDevAction) {
+                    renderMain(renderAnalysisDetails("Sub-part 2 Pinpoint Analysis", getTodayElp()?.part2Sub2Analysis, "Use the developer action button to analyze the saved transcript."));
+                    break;
+                }
+            }
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const transcript = getTodayElp()?.part2Sub2Transcript || getTodayElp()?.lastTranscript?.transcript || "";
             const analysis = await analyzePart2("sub2", transcript);
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Sub-part 2 Pinpoint Analysis</h3><p><strong>Covered:</strong> ${(analysis.covered || []).map(escapeHTML).join(", ") || "none"}</p><p><strong>Missed:</strong> ${(analysis.missed || []).map(escapeHTML).join(", ") || "none"}</p>`);
+                renderMain(renderAnalysisDetails("Sub-part 2 Pinpoint Analysis", analysis, "No analysis result."));
             }
             saveElpPatch({ part2Sub2Analysis: analysis });
             if (!isDev) {
@@ -818,8 +967,12 @@ async function runCurrentState() {
         case "PART3_SET2_DESCRIBE":
         case "PART3_SET3_DESCRIBE": {
             if (isDev) {
-                const transcript = await recordAndTranscribe(state.toLowerCase());
-                renderMain(`<h3>${escapeHTML(state)}</h3><p>${escapeHTML(transcript)}</p><p>No follow-up in Part 3 by design.</p>`);
+                const transcript = getTodayElp()?.lastTranscript?.state === state ? getTodayElp()?.lastTranscript?.transcript || "" : "";
+                if (executeDevAction) {
+                    await recordCurrentDevAnswer();
+                } else {
+                    renderMain(renderTranscriptPrompt(state, transcript, "Use the developer Record button to capture this answer.", "<p>No follow-up in Part 3 by design.</p>"));
+                }
             } else {
                 renderMain(`<h3>Describe What You Read</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
             }
@@ -915,6 +1068,10 @@ async function runCurrentState() {
         }
 
         case "SCORING": {
+            if (isDev && !executeDevAction) {
+                renderMain(renderScoreDetails(getTodayElp()?.scoring));
+                break;
+            }
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Calculating your ICAO scores\u2026");
             const anthropicKey = getSettings().apiKeys.anthropic;
             const evidence = { stateLog: STATES, transcripts: runtime.transcripts, day: getTodayElp() };
@@ -931,12 +1088,7 @@ async function runCurrentState() {
             }
 
             if (isDev) {
-                renderMain(`
-                    <h3>ICAO Score</h3>
-                    <p>Pronunciation: ${score.pronunciation}</p><p>Structure: ${score.structure}</p><p>Vocabulary: ${score.vocabulary}</p>
-                    <p>Fluency: ${score.fluency}</p><p>Comprehension: ${score.comprehension}</p><p>Interactions: ${score.interactions}</p>
-                    <p><strong>Overall: ${score.overall}</strong></p><p class="hint">${escapeHTML(score.rationale)}</p>
-                `);
+                renderMain(renderScoreDetails(score));
             } else {
                 renderMain(renderScorecard(score));
             }
@@ -966,6 +1118,7 @@ async function runCurrentState() {
     }
 
     renderActionArea();
+    updateDevControls();
 }
 
 /* ── Navigation ── */
@@ -1036,7 +1189,7 @@ function setup() {
 
             <div class="elp-action-area" id="elpActionArea"></div>
 
-            <div class="elp-dev-controls">
+            <div class="elp-dev-controls" id="elpDevControls">
                 <button id="elpStart" class="btn btn-primary">Start / Resume</button>
                 <button id="elpPrev" class="btn btn-secondary">Previous State</button>
                 <button id="elpNext" class="btn btn-secondary">Next State</button>
@@ -1052,6 +1205,7 @@ function setup() {
     audioEl = root.querySelector("#elpAudio");
     playback = createPlaybackController(audioEl);
     recorder = createRecorder();
+    updateModeClass();
 
     setState(getTodayElp()?.state || "IDLE");
 
@@ -1074,7 +1228,7 @@ function setup() {
         if (busy) return;
         if (state === "IDLE") setState("PART1_WARMUP");
         setBusy(true);
-        try { await runCurrentState(); } finally { setBusy(false); }
+        try { await runCurrentState({ executeDevAction: isProcessState() }); } finally { setBusy(false); }
     });
     root.querySelector("#elpNext").addEventListener("click", nextState);
     root.querySelector("#elpPrev").addEventListener("click", previousState);
@@ -1082,14 +1236,13 @@ function setup() {
         if (busy) return;
         setBusy(true);
         try {
-            const transcript = await recordAndTranscribe(state);
-            root.querySelector("#elpContent").insertAdjacentHTML("beforeend", `<p><strong>Transcript:</strong> ${escapeHTML(transcript)}</p>`);
-            saveElpPatch({ lastTranscript: { state, transcript } });
+            await runCurrentState({ executeDevAction: true });
         } catch (err) { alert(`Recording failed: ${err.message}`); }
         finally { setBusy(false); }
     });
     root.querySelector("#elpPlay").addEventListener("click", playCurrentStory);
 
+    initialized = true;
     runCurrentState();
 }
 
@@ -1107,6 +1260,18 @@ export function generate() {
 }
 
 export function loadToday() {
-    cleanup();
-    setup();
+    if (!initialized) {
+        setup();
+        return;
+    }
+
+    const nextMode = dev() ? "dev" : "production";
+    if (renderedMode !== nextMode) {
+        updateModeClass();
+    }
+    updateDevControls();
+    setState(getTodayElp()?.state || state || "IDLE");
+    if (!root.querySelector("#elpContent")?.innerHTML?.trim()) {
+        runCurrentState();
+    }
 }
