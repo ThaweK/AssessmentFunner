@@ -12,6 +12,7 @@ const PASSWORD_KEY = KEYS.oldAuth;
 let cachedLogs = [];
 let currentTab = "psychomotor";
 let debugScope = "active";
+let selectedDebugLogId = null;
 
 const tabs = {
     psychomotor: psychomotorTab,
@@ -38,12 +39,34 @@ function refreshDerivedViews() {
     renderDebugPanel();
 }
 
-function formatDebugEntry(entry) {
-    const details = entry.details ? JSON.stringify(entry.details, null, 2) : "";
-    return [
-        `[${entry.timestamp}] [${entry.level}] [${entry.tab}] [${entry.source}] ${entry.message}`,
-        details
-    ].filter(Boolean).join("\n");
+function formatDebugTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return timestamp;
+    return date.toLocaleString();
+}
+
+function formatDebugPreview(entry) {
+    const details = entry.details ? JSON.stringify(entry.details) : "";
+    return [entry.message, details].filter(Boolean).join(" ").slice(0, 140);
+}
+
+function getOrderedScopedLogs() {
+    return [...getScopedLogs()].reverse();
+}
+
+function getSelectedDebugEntry(scopedLogs) {
+    if (!scopedLogs.length) {
+        selectedDebugLogId = null;
+        return null;
+    }
+
+    const selected = scopedLogs.find((entry) => entry.id === selectedDebugLogId);
+    if (selected) {
+        return selected;
+    }
+
+    selectedDebugLogId = scopedLogs[0].id;
+    return scopedLogs[0];
 }
 
 function getScopedLogs() {
@@ -62,10 +85,28 @@ function renderDebugPanel() {
     }
 
     panel.hidden = false;
-    const scopedLogs = getScopedLogs();
-    const content = scopedLogs.length
-        ? scopedLogs.map(formatDebugEntry).join("\n\n----------------------------------------\n\n")
-        : "No debug logs yet.";
+    const scopedLogs = getOrderedScopedLogs();
+    const selectedEntry = getSelectedDebugEntry(scopedLogs);
+    const detailContent = selectedEntry?.details
+        ? JSON.stringify(selectedEntry.details, null, 2)
+        : "No detail payload for this log entry.";
+    const tocContent = scopedLogs.length
+        ? scopedLogs.map((entry, index) => `
+            <button
+                type="button"
+                class="debug-toc-item${entry.id === selectedEntry?.id ? " active" : ""}"
+                data-debug-log-id="${entry.id}"
+                title="${escapeHTML(entry.message)}"
+            >
+                <span class="debug-toc-index">#${scopedLogs.length - index}</span>
+                <span class="debug-toc-main">
+                    <span class="debug-toc-message">${escapeHTML(entry.message)}</span>
+                    <span class="debug-toc-meta">${escapeHTML(formatDebugTimestamp(entry.timestamp))} | ${escapeHTML(entry.source)} | ${escapeHTML(entry.level.toUpperCase())}</span>
+                    <span class="debug-toc-preview">${escapeHTML(formatDebugPreview(entry))}</span>
+                </span>
+            </button>
+        `).join("")
+        : `<div class="debug-empty">No debug logs yet.</div>`;
 
     panel.innerHTML = `
         <section class="card debug-card">
@@ -87,14 +128,42 @@ function renderDebugPanel() {
                     <button id="debugClearBtn" class="btn btn-secondary">Clear Logs</button>
                 </div>
             </div>
-            <pre class="debug-pre">${escapeHTML(content)}</pre>
+            <div class="debug-layout">
+                <aside class="debug-toc">
+                    <div class="debug-toc-summary">${scopedLogs.length} entr${scopedLogs.length === 1 ? "y" : "ies"}</div>
+                    <div class="debug-toc-list">${tocContent}</div>
+                </aside>
+                <section class="debug-detail">
+                    ${selectedEntry ? `
+                        <div class="debug-detail-header">
+                            <div class="debug-detail-badges">
+                                <span class="debug-badge">${escapeHTML(selectedEntry.tab)}</span>
+                                <span class="debug-badge">${escapeHTML(selectedEntry.level.toUpperCase())}</span>
+                                <span class="debug-badge">${escapeHTML(selectedEntry.source)}</span>
+                            </div>
+                            <div class="debug-detail-time">${escapeHTML(formatDebugTimestamp(selectedEntry.timestamp))}</div>
+                        </div>
+                        <h3 class="debug-detail-title">${escapeHTML(selectedEntry.message)}</h3>
+                        <pre class="debug-pre">${escapeHTML(detailContent)}</pre>
+                    ` : `
+                        <div class="debug-empty">Select a log entry to inspect its details.</div>
+                    `}
+                </section>
+            </div>
         </section>
     `;
 
     panel.querySelector("#debugClearBtn")?.addEventListener("click", () => clearDebugLogs());
     panel.querySelector("#debugScopeSelect")?.addEventListener("change", (event) => {
         debugScope = event.target.value;
+        selectedDebugLogId = null;
         renderDebugPanel();
+    });
+    panel.querySelectorAll("[data-debug-log-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+            selectedDebugLogId = button.dataset.debugLogId;
+            renderDebugPanel();
+        });
     });
 }
 

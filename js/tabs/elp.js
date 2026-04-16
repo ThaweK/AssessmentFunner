@@ -91,6 +91,8 @@ const REMOTE_IMAGE_FALLBACK = Object.freeze([
     "https://images.pexels.com/photos/912050/pexels-photo-912050.jpeg"
 ]);
 
+const DEFAULT_ELEVEN_STORY_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
+
 const imageLoadCache = new Map();
 
 const BURST_TEXTS = {
@@ -177,6 +179,43 @@ function saveElpPatch(patch) {
         return { elp: { ...base, ...patch, state, updatedAt: new Date().toISOString() } };
     });
     onDataUpdated();
+}
+
+function pickEnglishSpeechVoice() {
+    if (!("speechSynthesis" in window)) {
+        return null;
+    }
+
+    const voices = speechSynthesis.getVoices();
+    return voices.find((voice) => /^en-(GB|US)$/i.test(voice.lang))
+        || voices.find((voice) => /^en/i.test(voice.lang))
+        || null;
+}
+
+function speakEnglishFallback(text, debugContext = {}) {
+    if (!("speechSynthesis" in window)) {
+        return;
+    }
+
+    speechSynthesis.cancel();
+
+    const utter = new SpeechSynthesisUtterance(text);
+    const voice = pickEnglishSpeechVoice();
+    utter.lang = voice?.lang || "en-GB";
+    utter.rate = 0.95;
+
+    if (voice) {
+        utter.voice = voice;
+    }
+
+    debugLog("elp.fallbackSpeech", "Using browser speech fallback", {
+        ...debugContext,
+        lang: utter.lang,
+        voiceName: voice?.name || null,
+        voiceURI: voice?.voiceURI || null
+    }, "warn");
+
+    speechSynthesis.speak(utter);
 }
 
 function makeFallbackScore(rationale = "Fallback score used.") {
@@ -456,7 +495,7 @@ async function buildPart2Story(label) {
             const blob = await generateSpeechWithElevenLabs({
                 apiKey: elevenKey,
                 text: script,
-                voiceId: "JBFqnCBsd6RMkjVDRZzb",
+                voiceId: DEFAULT_ELEVEN_STORY_VOICE_ID,
                 debugContext: { tab: "elp", operation: "buildPart2Story.tts", label }
             });
             return { script, pinpoints, audioSrc: URL.createObjectURL(blob) };
@@ -468,9 +507,7 @@ async function buildPart2Story(label) {
             }, "warn");
         }
     }
-    const utter = new SpeechSynthesisUtterance(script);
-    utter.rate = 0.95;
-    speechSynthesis.speak(utter);
+    speakEnglishFallback(script, { tab: "elp", operation: "buildPart2Story.fallbackTts", label });
     return { script, pinpoints, audioSrc: null };
 }
 
