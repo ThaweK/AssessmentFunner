@@ -17,6 +17,7 @@ function render() {
     root.querySelector("#anthropicMasked").value = mask(settings.apiKeys.anthropic);
     root.querySelector("#openaiMasked").value = mask(settings.apiKeys.openai);
     root.querySelector("#elevenMasked").value = mask(settings.apiKeys.elevenlabs);
+    root.querySelector("#pexelsMasked").value = mask(settings.apiKeys.pexels);
 
     const status = [];
     if (settings.sync.lastExportAt) status.push(`Last export: ${new Date(settings.sync.lastExportAt).toLocaleString()}`);
@@ -77,6 +78,17 @@ function setup() {
             </article>
 
             <article class="settings-card">
+                <h3>Pexels (Dynamic Images)</h3>
+                <input id="pexelsMasked" readonly>
+                <div class="key-row">
+                    <input id="pexelsInput" type="password" placeholder="Paste Pexels API key" autocomplete="off">
+                    <button id="savePexels" class="btn btn-secondary">Save</button>
+                    <button id="testPexels" class="btn btn-secondary">Test</button>
+                </div>
+                <small id="pexelsStatus"></small>
+            </article>
+
+            <article class="settings-card">
                 <h3>Data Sync (Manual JSON)</h3>
                 <p id="syncStatus" class="hint"></p>
                 <div class="elp-controls">
@@ -106,6 +118,7 @@ function setup() {
     root.querySelector("#saveAnthropic").addEventListener("click", () => saveKey("anthropic", "#anthropicInput"));
     root.querySelector("#saveOpenai").addEventListener("click", () => saveKey("openai", "#openaiInput"));
     root.querySelector("#saveEleven").addEventListener("click", () => saveKey("elevenlabs", "#elevenInput"));
+    root.querySelector("#savePexels").addEventListener("click", () => saveKey("pexels", "#pexelsInput"));
 
     root.querySelector("#testAnthropic").addEventListener("click", async () => {
         const status = root.querySelector("#anthropicStatus");
@@ -133,6 +146,17 @@ function setup() {
         const status = root.querySelector("#elevenStatus");
         try {
             status.textContent = await smokeTestProvider({ provider: "elevenlabs", apiKey: getSettings().apiKeys.elevenlabs });
+            status.className = "status-ok";
+        } catch (err) {
+            status.textContent = err.message;
+            status.className = "status-bad";
+        }
+    });
+
+    root.querySelector("#testPexels").addEventListener("click", async () => {
+        const status = root.querySelector("#pexelsStatus");
+        try {
+            status.textContent = await smokeTestProvider({ provider: "pexels", apiKey: getSettings().apiKeys.pexels });
             status.className = "status-ok";
         } catch (err) {
             status.textContent = err.message;

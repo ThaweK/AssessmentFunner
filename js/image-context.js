@@ -149,6 +149,7 @@ async function prepareImageForVision(src, maxSide = 1024) {
 function fallbackDescriptor(imageKey) {
     const label = fileLabelFromKey(imageKey);
     const lower = label.toLowerCase();
+    const isRemoteUrl = imageKey.startsWith("http://") || imageKey.startsWith("https://");
     const hazards = [];
     if (lower.includes("cockpit")) {
         hazards.push("high cockpit workload");
@@ -156,16 +157,23 @@ function fallbackDescriptor(imageKey) {
     } else if (lower.includes("wing")) {
         hazards.push("weather and turbulence awareness");
         hazards.push("trajectory and separation monitoring");
+    } else if (isRemoteUrl) {
+        hazards.push("situational awareness and threat identification");
+        hazards.push("communication clarity under operational pressure");
     } else {
         hazards.push("ground movement conflict risk");
         hazards.push("communication gaps during busy operations");
     }
 
+    const sceneSummary = isRemoteUrl
+        ? "Aviation scene from dynamic image source."
+        : `Aviation scene (${label}).`;
+
     return {
         imageKey,
         source: "fallback",
         model: "fallback-v1",
-        sceneSummary: `Aviation scene (${label}).`,
+        sceneSummary,
         operationalContext: "Assess operational priorities, communication clarity, and safety margins based on visible cues.",
         hazards,
         keyObjects: ["aircraft", "airport environment"],
@@ -285,6 +293,7 @@ Return strict JSON only:
   }
 }
 Rules:
+- part1Followups MUST directly reference specific objects, hazards, or details visible in this photo.
 - Keep questions practical and aviation-specific.
 - Do not invent hidden details.
 - If something is unclear, use cautious language.`;

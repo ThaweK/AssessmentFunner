@@ -19,7 +19,8 @@ const DEFAULT_SETTINGS = {
     apiKeys: {
         anthropic: "",
         openai: "",
-        elevenlabs: ""
+        elevenlabs: "",
+        pexels: ""
     },
     imageDescriptors: {},
     sync: {

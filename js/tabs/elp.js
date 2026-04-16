@@ -1,4 +1,4 @@
-import { askClaude, generateSpeechWithElevenLabs } from "../api.js";
+import { askClaude, generateSpeechWithElevenLabs, generateSoundEffect, searchPexels } from "../api.js";
 import { debugLog } from "../debug.js";
 import { FLUENCY_TASKS } from "../fluency-data.js";
 import { buildPart1FollowupQuestions, buildPart4DiscussionQuestions, buildPart4FollowupQuestions, getImageDescriptor, getKnownLocalImageKeys } from "../image-context.js";
@@ -59,6 +59,40 @@ const STATE_META = {
     PART4_DISCUSSION:       { part: 4, section: "Part 4 \u2014 Discussion",    label: "Discussion",  instruction: "Discuss these broader aviation topics." },
     SCORING:                { part: 4, section: "Scoring",                      label: "Results",     instruction: "Calculating your ICAO proficiency scores\u2026", auto: "process" },
     COMPLETE:               { part: 4, section: "Complete",                     label: "Complete",    instruction: "Your ELP session is complete." }
+};
+
+/* States hidden from the TOC (internal processing steps) */
+const TOC_HIDDEN = new Set(["IDLE", "PART2_SUB1_ANALYZE", "PART2_SUB2_ANALYZE"]);
+
+/* Friendly TOC labels that disambiguate sub-parts */
+const TOC_LABELS = {
+    PART1_FOLLOWUPS:     "Picture: Follow-ups",
+    PART2_SUB1_PLAY:     "Story 1: Listen",
+    PART2_SUB1_DESCRIBE: "Story 1: Describe",
+    PART2_SUB1_FOLLOWUP: "Story 1: Follow-ups",
+    PART2_SUB2_PLAY:     "Story 2: Listen",
+    PART2_SUB2_DESCRIBE: "Story 2: Describe",
+    PART2_SUB2_FOLLOWUP: "Story 2: Follow-ups",
+    SCORING:             "Scoring",
+    COMPLETE:            "Results"
+};
+
+/* Voice IDs for multi-voice TTS (ElevenLabs default library) */
+const VOICE_MAP = {
+    NARRATOR:  "JBFqnCBsd6RMkjVDRZzb",  // George — neutral narrator
+    CPT:       "TX3LPaxmHKxFdv7VOQHJ",  // Liam — deep, authoritative
+    FO:        "EXAVITQu4vr4xnSDxMaL",  // Sarah — clear, professional
+    ATC:       "onwK4e9ZLuTAKqWW03F9",  // Daniel — clipped, British
+    CC:        "ThT5KcBeYPX3keUQqHPh",  // Dorothy — warm, calm
+    PAX:       "AZnzlk1XvdvUeBnXmlld",  // Domi — casual
+    DISPATCH:  "onwK4e9ZLuTAKqWW03F9",  // reuse Daniel
+    OPS:       "onwK4e9ZLuTAKqWW03F9"   // reuse Daniel
+};
+
+const VOICE_SETTINGS = {
+    ATC:      { stability: 0.7, similarity_boost: 0.5 },
+    CPT:      { stability: 0.5, similarity_boost: 0.7 },
+    DISPATCH: { stability: 0.7, similarity_boost: 0.5 }
 };
 
 const ICAO_LEVELS = { 1: "Pre-elementary", 2: "Elementary", 3: "Pre-operational", 4: "Operational", 5: "Extended", 6: "Expert" };
@@ -131,7 +165,8 @@ const runtime = {
         part3: [],
         part4: ["differences captured", "safety interpretation", "operational recommendation"]
     },
-    story: { sub1: null, sub2: null }
+    story: { sub1: null, sub2: null },
+    pexelsAttribution: {}
 };
 
 const PLAY_STATE_TO_STORY_KEY = Object.freeze({
@@ -201,8 +236,8 @@ function setState(next) {
     if (instrEl && meta) {
         instrEl.textContent = meta.instruction;
     }
-
     updateDevControls();
+    updateToc();
 }
 
 function setBusy(isBusy) {
@@ -319,8 +354,89 @@ function renderMain(content) {
     root.querySelector("#elpContent").innerHTML = content;
 }
 
+function renderToc() {
+    const nav = root.querySelector("#elpToc");
+    if (!nav) return;
+
+    let html = "";
+    let currentSection = "";
+
+    for (const s of STATES) {
+        if (TOC_HIDDEN.has(s)) continue;
+        const meta = STATE_META[s];
+        if (!meta) continue;
+
+        if (meta.section !== currentSection) {
+            currentSection = meta.section;
+            html += `<div class="toc-group">${escapeHTML(currentSection)}</div>`;
+        }
+
+        const label = TOC_LABELS[s] || meta.label;
+        html += `<div class="toc-item" data-state="${s}">${escapeHTML(label)}</div>`;
+    }
+
+    nav.innerHTML = html;
+    updateToc();
+}
+
+function updateToc() {
+    const nav = root.querySelector("#elpToc");
+    if (!nav) return;
+
+    const idx = STATES.indexOf(state);
+    // For hidden (analyze) states, highlight the preceding visible state
+    let activeState = state;
+    if (TOC_HIDDEN.has(state)) {
+        for (let i = idx - 1; i >= 0; i--) {
+            if (!TOC_HIDDEN.has(STATES[i])) { activeState = STATES[i]; break; }
+        }
+    }
+
+    // Build ordered list of visible TOC states
+    const visibleStates = STATES.filter(s => !TOC_HIDDEN.has(s));
+    const activeVisIdx = visibleStates.indexOf(activeState);
+    const WINDOW = 3; // show N items before & after active
+
+    // Determine which states fall within the visible window
+    const windowStart = Math.max(0, activeVisIdx - WINDOW);
+    const windowEnd = Math.min(visibleStates.length - 1, activeVisIdx + WINDOW);
+    const visibleSet = new Set(visibleStates.slice(windowStart, windowEnd + 1));
+
+    // Also figure out which section headers to keep
+    const visibleSections = new Set();
+    for (const s of visibleSet) {
+        visibleSections.add(STATE_META[s]?.section);
+    }
+
+    const activeIdx = STATES.indexOf(activeState);
+
+    for (const el of nav.children) {
+        if (el.classList.contains("toc-group")) {
+            el.classList.toggle("toc-hidden", !visibleSections.has(el.textContent));
+        } else if (el.classList.contains("toc-item")) {
+            const s = el.dataset.state;
+            const sIdx = STATES.indexOf(s);
+            el.classList.toggle("toc-active", s === activeState);
+            el.classList.toggle("toc-done", sIdx < activeIdx);
+            el.classList.toggle("toc-hidden", !visibleSet.has(s));
+        }
+    }
+}
+
 function renderQuestionList(items) {
     return `<ul class="elp-questions">${items.map((q) => `<li>${escapeHTML(q)}</li>`).join("")}</ul>`;
+}
+
+function pexelsCredit(src) {
+    const attr = runtime.pexelsAttribution?.[src];
+    if (!attr) return "";
+    const photographerLink = attr.photographerUrl
+        ? `<a href="${attr.photographerUrl}" target="_blank" rel="noopener">${escapeHTML(attr.photographerCredit)}</a>`
+        : escapeHTML(attr.photographerCredit);
+    const pexelsLink = attr.pexelsUrl
+        ? `<a href="${attr.pexelsUrl}" target="_blank" rel="noopener">Pexels</a>`
+        : "Pexels";
+    return `<div class="pexels-credit">Photo by ${photographerLink} on ${pexelsLink}</div>`;
 }
 
 function savedPicture(key) {
@@ -574,62 +690,258 @@ async function buildWarmupQuestions() {
     }
 }
 
+function segmentsToScript(segments) {
+    return segments.map(s =>
+        s.role === "AMBIENT" ? `[${s.text}]` : `${s.role}: ${s.text}`
+    ).join("\n");
+}
+
+function segmentsToPlainText(segments) {
+    return segments.filter(s => s.role !== "AMBIENT").map(s => s.text).join(" ");
+}
+
+async function concatenateAudioBlobs(blobs) {
+    const ctx = new AudioContext();
+    const buffers = [];
+    for (const blob of blobs) {
+        try {
+            const arrayBuf = await blob.arrayBuffer();
+            const decoded = await ctx.decodeAudioData(arrayBuf);
+            buffers.push(decoded);
+        } catch {
+            // skip undecodable segments
+        }
+    }
+    if (!buffers.length) { ctx.close(); return null; }
+
+    const sampleRate = buffers[0].sampleRate;
+    const channels = buffers[0].numberOfChannels;
+    const totalLength = buffers.reduce((sum, b) => sum + b.length, 0);
+    const output = ctx.createBuffer(channels, totalLength, sampleRate);
+
+    let offset = 0;
+    for (const buf of buffers) {
+        for (let ch = 0; ch < channels; ch++) {
+            output.getChannelData(ch).set(buf.getChannelData(ch), offset);
+        }
+        offset += buf.length;
+    }
+
+    // Encode to WAV
+    const wavBlob = audioBufferToWav(output);
+    ctx.close();
+    return wavBlob;
+}
+
+function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitsPerSample = 16;
+    const interleaved = numChannels === 1
+        ? buffer.getChannelData(0)
+        : interleaveChannels(buffer);
+    const dataLength = interleaved.length * (bitsPerSample / 8);
+    const headerLength = 44;
+    const arrayBuffer = new ArrayBuffer(headerLength + dataLength);
+    const view = new DataView(arrayBuffer);
+
+    writeString(view, 0, "RIFF");
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(view, 8, "WAVE");
+    writeString(view, 12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+    view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(view, 36, "data");
+    view.setUint32(40, dataLength, true);
+
+    let off = 44;
+    for (let i = 0; i < interleaved.length; i++, off += 2) {
+        const s = Math.max(-1, Math.min(1, interleaved[i]));
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Blob([arrayBuffer], { type: "audio/wav" });
+}
+
+function interleaveChannels(buffer) {
+    const left = buffer.getChannelData(0);
+    const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+    const result = new Float32Array(left.length * 2);
+    for (let i = 0; i < left.length; i++) {
+        result[i * 2] = left[i];
+        result[i * 2 + 1] = right[i];
+    }
+    return result;
+}
+
+function writeString(view, offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
 async function buildPart2Story(label) {
     const settings = getSettings();
     const anthropicKey = settings.apiKeys.anthropic;
     const elevenKey = settings.apiKeys.elevenlabs;
-    const fallbackText = label === "sub1"
-        ? "Boarding starts, ATC flow restrictions apply, and crew manages minor technical note before pushback."
-        : "Mid-flight non-standard event escalates with weather and passenger pressure, requiring coordinated crew response.";
-    let script = fallbackText;
+    const fallbackSegments = [
+        { role: "NARRATOR", text: label === "sub1"
+            ? "Boarding starts, ATC flow restrictions apply, and crew manages minor technical note before pushback."
+            : "Mid-flight non-standard event escalates with weather and passenger pressure, requiring coordinated crew response." }
+    ];
+    let segments = fallbackSegments;
     let pinpoints = runtime.pinpoints[label];
     debugLog("elp.buildPart2Story", "Building story", { tab: "elp", label });
+
     if (anthropicKey) {
         try {
-            const prompt = `Create aviation listening story for ${label}. Include pilot, ATC, cabin crew, passenger dialogue markers and ambient markers. Return JSON {"script":"...","pinpoints":[8-15 short checkpoints]}`;
+            const prompt = `Write a detailed, immersive aviation fiction story (story ${label}) that takes approximately 6–10 minutes when spoken aloud (roughly 1,500–2,500 words of dialogue and narration).
+
+OUTPUT FORMAT — return strict JSON only:
+{
+  "segments": [
+    { "role": "NARRATOR", "text": "..." },
+    { "role": "CPT", "text": "..." },
+    { "role": "AMBIENT", "text": "short sound-effect description" },
+    ...
+  ],
+  "pinpoints": ["checkpoint 1", "checkpoint 2", ...]
+}
+
+SEGMENT RULES:
+- Each segment has exactly one "role" and one "text".
+- Valid roles: NARRATOR, CPT, FO, ATC, CC, PAX, DISPATCH, OPS, AMBIENT.
+- Do NOT put role prefixes inside the text — the role field handles that.
+- AMBIENT segments are short sound-effect descriptions (≤ 12 words) that will be rendered as audio, e.g. "engine spoolup with rain hitting the windshield", "seatbelt chime followed by cabin PA click". They are NOT read aloud — they become generated sound effects.
+- All other roles are spoken dialogue or narration — write natural speech only.
+
+STORY STRUCTURE:
+Divide the story into clear phases of flight (pre-departure, taxi, takeoff, cruise, descent/approach, landing or emergency resolution). Each phase should advance the plot and build tension. Let scenes breathe with detail.
+
+DIALOGUE:
+- CPT (Captain) and FO (First Officer) have a working dynamic — contrasting styles that surface under pressure.
+- ATC transmissions use realistic phraseology: callsigns, headings, altitudes, readbacks. Short, clipped, professional.
+- At least one cabin crew member (CC) has a moment beyond announcements.
+- At least one passenger (PAX) perspective anchors the cabin side.
+
+REALISM:
+Include proper aviation terminology: callsigns, flight levels, squawk codes, STAR/SID names, runway designators, standard ATC phrases, checklists, CRM dialogue.
+
+AMBIENT LAYERING:
+Scatter AMBIENT segments generously — sounds at the gate differ from cruise, which differ from an approach in deteriorating weather.
+
+PINPOINTS: 8–15 short checkpoint phrases capturing key plot or safety moments a listener should recall.`;
+
             const text = await askClaude({
                 apiKey: anthropicKey,
                 prompt,
-                maxTokens: 1500,
+                maxTokens: 8000,
                 temperature: 0.35,
+                timeoutMs: 120000,
                 debugContext: { tab: "elp", operation: "buildPart2Story", label }
             });
             const parsed = extractJSON(text);
             if (parsed) {
-                script = typeof parsed.script === "string" && parsed.script.trim() ? parsed.script : script;
-                pinpoints = Array.isArray(parsed.pinpoints) && parsed.pinpoints.length ? parsed.pinpoints : pinpoints;
+                if (Array.isArray(parsed.segments) && parsed.segments.length) {
+                    segments = parsed.segments.filter(s => s?.role && s?.text);
+                }
+                if (Array.isArray(parsed.pinpoints) && parsed.pinpoints.length) {
+                    pinpoints = parsed.pinpoints;
+                }
             }
         } catch (err) {
-            debugLog("elp.buildPart2Story", "Story generation failed, fallback story used", {
-                tab: "elp",
-                label,
-                error: err?.message || String(err)
+            debugLog("elp.buildPart2Story", "Story generation failed, fallback used", {
+                tab: "elp", label, error: err?.message || String(err)
             }, "warn");
         }
     }
+
+    const script = segmentsToScript(segments);
     runtime.pinpoints[label] = pinpoints;
+
     if (elevenKey) {
         try {
-            const blob = await generateSpeechWithElevenLabs({
-                apiKey: elevenKey,
-                text: script,
-                voiceId: DEFAULT_ELEVEN_STORY_VOICE_ID,
-                debugContext: { tab: "elp", operation: "buildPart2Story.tts", label }
+            debugLog("elp.buildPart2Story", `Generating audio for ${segments.length} segments`, { tab: "elp", label });
+            const blobPromises = segments.map((seg, i) => {
+                const ctx = { tab: "elp", operation: "buildPart2Story.tts", label, segment: i, role: seg.role };
+                if (seg.role === "AMBIENT") {
+                    return generateSoundEffect({
+                        apiKey: elevenKey,
+                        text: seg.text,
+                        durationSeconds: 3,
+                        debugContext: ctx
+                    }).catch(() => null);
+                }
+                const voiceId = VOICE_MAP[seg.role] || VOICE_MAP.NARRATOR;
+                const voiceSettings = VOICE_SETTINGS[seg.role] || undefined;
+                return generateSpeechWithElevenLabs({
+                    apiKey: elevenKey,
+                    text: seg.text,
+                    voiceId,
+                    voiceSettings,
+                    debugContext: ctx
+                }).catch(() => null);
             });
-            return { script, pinpoints, audioSrc: URL.createObjectURL(blob) };
+
+            const blobs = (await Promise.all(blobPromises)).filter(Boolean);
+            if (blobs.length) {
+                const combined = await concatenateAudioBlobs(blobs);
+                if (combined) {
+                    return { script, segments, pinpoints, audioSrc: URL.createObjectURL(combined) };
+                }
+            }
+            debugLog("elp.buildPart2Story", "Audio stitching produced no output, falling back", { tab: "elp", label }, "warn");
         } catch (err) {
-            debugLog("elp.buildPart2Story", "TTS failed, speechSynthesis fallback", {
-                tab: "elp",
-                label,
-                error: err?.message || String(err)
+            debugLog("elp.buildPart2Story", "TTS pipeline failed, speechSynthesis fallback", {
+                tab: "elp", label, error: err?.message || String(err)
             }, "warn");
         }
     }
-    speakEnglishFallback(script, { tab: "elp", operation: "buildPart2Story.fallbackTts", label });
-    return { script, pinpoints, audioSrc: null };
+
+    const plainText = segmentsToPlainText(segments);
+    speakEnglishFallback(plainText, { tab: "elp", operation: "buildPart2Story.fallbackTts", label });
+    return { script, segments, pinpoints, audioSrc: null };
+}
+
+function getUsedPexelsIds() {
+    try {
+        return JSON.parse(sessionStorage.getItem("af_pexels_used") || "[]");
+    } catch { return []; }
+}
+
+function trackPexelsId(id) {
+    const used = getUsedPexelsIds();
+    if (!used.includes(id)) used.push(id);
+    sessionStorage.setItem("af_pexels_used", JSON.stringify(used));
 }
 
 async function ensurePicture(type) {
+    // Priority 1: Pexels API (if key available)
+    const pexelsKey = getSettings().apiKeys.pexels;
+    if (pexelsKey) {
+        try {
+            const exclude = getUsedPexelsIds();
+            const result = await searchPexels({ apiKey: pexelsKey, exclude, debugContext: { tab: "elp", type } });
+            if (result?.url) {
+                trackPexelsId(result.pexelsId);
+                // Store attribution for later display
+                if (!runtime.pexelsAttribution) runtime.pexelsAttribution = {};
+                runtime.pexelsAttribution[result.url] = result;
+                return result.url;
+            }
+        } catch (err) {
+            debugLog("elp.ensurePicture", "Pexels search failed, falling back to local images.", {
+                tab: "elp",
+                type,
+                error: err?.message || String(err)
+            }, "warn");
+        }
+    }
+
+    // Priority 2: Local images
     const defaultPool = type === "compare" ? DEFAULT_LOCAL_IMAGE_LIBRARY.compare : DEFAULT_LOCAL_IMAGE_LIBRARY.single;
     const preferred = await getKnownLocalImageKeys(defaultPool);
     const verified = await Promise.all(preferred.map(async (src) => ({ src, ok: await canLoadImage(src) })));
@@ -637,6 +949,8 @@ async function ensurePicture(type) {
     if (availableLocal.length) {
         return randomPick(availableLocal);
     }
+
+    // Priority 3: Remote fallback
     debugLog("elp.ensurePicture", "Local image pool unavailable, using remote fallback.", {
         tab: "elp",
         type,
@@ -768,7 +1082,7 @@ async function runCurrentState(options = {}) {
             const picture = await ensurePicture("single");
             const pictureContext = await getImageDescriptor(picture, { debugContext: { tab: "elp", state: "PART1_PICTURE" } });
             loader.remove();
-            renderMain(`<h3>${isDev ? "Part 1 Picture" : "Describe This Scene"}</h3><img class="elp-picture" src="${picture}" alt="aviation scenario">`);
+            renderMain(`<h3>${isDev ? "Part 1 Picture" : "Describe This Scene"}</h3><img class="elp-picture" src="${picture}" alt="aviation scenario">${pexelsCredit(picture)}`);
             saveElpPatch({ part1Picture: picture, part1PictureContext: pictureContext });
             break;
         }
@@ -795,7 +1109,7 @@ async function runCurrentState(options = {}) {
             runtime.story.sub1 = await buildPart2Story("sub1");
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Part 2 Sub-part 1 (Play once)</h3><p>${escapeHTML(runtime.story.sub1.script)}</p><p class="hint">Use Play button once.</p>`);
+                renderMain(`<h3>Part 2 Sub-part 1 (Play once)</h3><pre style="white-space:pre-wrap">${escapeHTML(runtime.story.sub1.script)}</pre><p class="hint">Use Play button once.</p>`);
             } else {
                 renderMain(`<h3>Listening Story</h3><p class="hint">Press Play to listen to the story. You will hear it only once.</p>`);
                 if (runtime.story.sub1.audioSrc) {
@@ -874,7 +1188,7 @@ async function runCurrentState(options = {}) {
             runtime.story.sub2 = await buildPart2Story("sub2");
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Part 2 Sub-part 2 (Play once)</h3><p>${escapeHTML(runtime.story.sub2.script)}</p><p class="hint">Continuation with non-standard event handling.</p>`);
+                renderMain(`<h3>Part 2 Sub-part 2 (Play once)</h3><pre style="white-space:pre-wrap">${escapeHTML(runtime.story.sub2.script)}</pre><p class="hint">Continuation with non-standard event handling.</p>`);
             } else {
                 renderMain(`<h3>Second Listening Story</h3><p class="hint">Press Play to listen. You will hear it only once.</p>`);
                 if (runtime.story.sub2.audioSrc) {
@@ -984,7 +1298,7 @@ async function runCurrentState(options = {}) {
             const picture1 = await ensurePicture("single");
             const picture1Context = await getImageDescriptor(picture1, { debugContext: { tab: "elp", state: "PART4_PICTURE1" } });
             loader.remove();
-            renderMain(`<h3>${isDev ? "Part 4 Picture 1" : "Study This Image"}</h3><img class="elp-picture" src="${picture1}" alt="aviation scenario">`);
+            renderMain(`<h3>${isDev ? "Part 4 Picture 1" : "Study This Image"}</h3><img class="elp-picture" src="${picture1}" alt="aviation scenario">${pexelsCredit(picture1)}`);
             saveElpPatch({ part4Picture1: picture1, part4Picture1Context: picture1Context });
             break;
         }
@@ -1008,9 +1322,9 @@ async function runCurrentState(options = {}) {
             ]);
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Part 4 Compare</h3><div class="elp-controls"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div><p>Describe similarities and differences in operational context.</p>`);
+                renderMain(`<h3>Part 4 Compare</h3><div class="elp-controls"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}<p>Describe similarities and differences in operational context.</p>`);
             } else {
-                renderMain(`<h3>Compare These Two Scenes</h3><div class="elp-compare"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>`);
+                renderMain(`<h3>Compare These Two Scenes</h3><div class="elp-compare"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}`);
             }
             saveElpPatch({
                 part4Picture1: picture1,
@@ -1181,24 +1495,29 @@ function setup() {
                 <button id="elpRestart" class="btn btn-secondary btn-sm">Restart Exam</button>
             </div>
 
-            <div class="elp-progress" id="elpProgress"></div>
-            <div class="elp-state" id="elpState"></div>
-            <div class="elp-instruction" id="elpInstruction"></div>
+            <div class="elp-layout">
+                <nav class="elp-toc" id="elpToc"></nav>
+                <div class="elp-main">
+                    <div class="elp-progress" id="elpProgress"></div>
+                    <div class="elp-state" id="elpState"></div>
+                    <div class="elp-instruction" id="elpInstruction"></div>
 
-            <div id="elpContent"></div>
+                    <div id="elpContent"></div>
 
-            <div class="elp-action-area" id="elpActionArea"></div>
+                    <div class="elp-action-area" id="elpActionArea"></div>
 
-            <div class="elp-dev-controls" id="elpDevControls">
-                <button id="elpStart" class="btn btn-primary">Start / Resume</button>
-                <button id="elpPrev" class="btn btn-secondary">Previous State</button>
-                <button id="elpNext" class="btn btn-secondary">Next State</button>
-                <button id="elpRecord" class="btn btn-secondary">Record Answer</button>
-                <button id="elpPlay" class="btn btn-secondary">Play Current Audio</button>
+                    <div class="elp-dev-controls" id="elpDevControls">
+                        <button id="elpStart" class="btn btn-primary">Start / Resume</button>
+                        <button id="elpPrev" class="btn btn-secondary">Previous State</button>
+                        <button id="elpNext" class="btn btn-secondary">Next State</button>
+                        <button id="elpRecord" class="btn btn-secondary">Record Answer</button>
+                        <button id="elpPlay" class="btn btn-secondary">Play Current Audio</button>
+                    </div>
+
+                    <audio id="elpAudio" controls></audio>
+                    <div id="audioLog" class="audio-log hint"></div>
+                </div>
             </div>
-
-            <audio id="elpAudio" controls></audio>
-            <div id="audioLog" class="audio-log hint"></div>
         </section>
     `;
 
@@ -1208,6 +1527,7 @@ function setup() {
     updateModeClass();
 
     setState(getTodayElp()?.state || "IDLE");
+    renderToc();
 
     root.querySelector("#elpRestart").addEventListener("click", () => {
         if (busy) return;
@@ -1216,6 +1536,7 @@ function setup() {
         runtime.transcripts.length = 0;
         runtime.story.sub1 = null;
         runtime.story.sub2 = null;
+        runtime.pexelsAttribution = {};
         upsertDay(getTodayString(), () => ({ elp: null }));
         setState("IDLE");
         onDataUpdated();
