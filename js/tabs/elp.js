@@ -1,4 +1,4 @@
-import { askClaude, generateSpeechWithElevenLabs, generateSoundEffect, searchPexels } from "../api.js";
+import { askClaude, generateSpeechWithElevenLabs, searchPexels } from "../api.js";
 import { debugLog } from "../debug.js";
 import { FLUENCY_TASKS } from "../fluency-data.js";
 import { buildPart1FollowupQuestions, buildPart4DiscussionQuestions, buildPart4FollowupQuestions, getImageDescriptor, getKnownLocalImageKeys } from "../image-context.js";
@@ -43,16 +43,16 @@ const STATE_META = {
     PART2_SUB1_DESCRIBE:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Describe",    instruction: "Describe what you heard in the story.", auto: "record" },
     PART2_SUB1_ANALYZE:     { part: 2, section: "Part 2 \u2014 Listening",     label: "Processing",  instruction: "Analyzing your response\u2026", auto: "process" },
     PART2_SUB1_FOLLOWUP:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Follow-ups",  instruction: "Answer these follow-up questions about the story." },
-    PART2_SUB2_PLAY:        { part: 2, section: "Part 2 \u2014 Listening",     label: "Listen",      instruction: "Listen carefully to the second story. You will hear it only once." },
-    PART2_SUB2_DESCRIBE:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Describe",    instruction: "Describe what you heard in the second story.", auto: "record" },
+    PART2_SUB2_PLAY:        { part: 2, section: "Part 2 \u2014 Listening",     label: "Listen",      instruction: "Listen carefully to the continuation of the story. You will hear it only once." },
+    PART2_SUB2_DESCRIBE:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Describe",    instruction: "Describe what you heard in the continuation, focusing on the non-standard/emergency handling.", auto: "record" },
     PART2_SUB2_ANALYZE:     { part: 2, section: "Part 2 \u2014 Listening",     label: "Processing",  instruction: "Analyzing your response\u2026", auto: "process" },
-    PART2_SUB2_FOLLOWUP:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Follow-ups",  instruction: "Answer these follow-up questions about the second story." },
-    PART3_SET1:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 1",       instruction: "Read these short communications carefully." },
-    PART3_SET1_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe what you just read.", auto: "record" },
-    PART3_SET2:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 2",       instruction: "Read these medium-length communications." },
-    PART3_SET2_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe what you just read.", auto: "record" },
-    PART3_SET3:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 3",       instruction: "This is the final and most detailed communication scenario." },
-    PART3_SET3_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe the scenario in detail.", auto: "record" },
+    PART2_SUB2_FOLLOWUP:    { part: 2, section: "Part 2 \u2014 Listening",     label: "Follow-ups",  instruction: "Answer these follow-up questions about the story continuation." },
+    PART3_SET1:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 1",       instruction: "Listen to three short recordings. Each can be played max two times." },
+    PART3_SET1_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe what you understood from the recordings.", auto: "record" },
+    PART3_SET2:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 2",       instruction: "Listen to three medium recordings. Each can be played max two times." },
+    PART3_SET2_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe what you understood from the recordings.", auto: "record" },
+    PART3_SET3:             { part: 3, section: "Part 3 \u2014 Communication", label: "Set 3",       instruction: "Listen to three dialogue recordings. Each can be played max two times." },
+    PART3_SET3_DESCRIBE:    { part: 3, section: "Part 3 \u2014 Communication", label: "Describe",    instruction: "Describe the dialogue details and operational meaning.", auto: "record" },
     PART4_PICTURE1:         { part: 4, section: "Part 4 \u2014 Discussion",    label: "Picture 1",   instruction: "Study this aviation image carefully." },
     PART4_PICTURE2_COMPARE: { part: 4, section: "Part 4 \u2014 Discussion",    label: "Compare",     instruction: "Compare these two images. Identify similarities and differences." },
     PART4_FOLLOWUPS:        { part: 4, section: "Part 4 \u2014 Discussion",    label: "Follow-ups",  instruction: "Answer these follow-up questions about the images." },
@@ -70,30 +70,58 @@ const TOC_LABELS = {
     PART2_SUB1_PLAY:     "Story 1: Listen",
     PART2_SUB1_DESCRIBE: "Story 1: Describe",
     PART2_SUB1_FOLLOWUP: "Story 1: Follow-ups",
-    PART2_SUB2_PLAY:     "Story 2: Listen",
-    PART2_SUB2_DESCRIBE: "Story 2: Describe",
-    PART2_SUB2_FOLLOWUP: "Story 2: Follow-ups",
+    PART2_SUB2_PLAY:     "Story Continuation: Listen",
+    PART2_SUB2_DESCRIBE: "Story Continuation: Describe",
+    PART2_SUB2_FOLLOWUP: "Story Continuation: Follow-ups",
     SCORING:             "Scoring",
     COMPLETE:            "Results"
 };
 
 /* Voice IDs for multi-voice TTS (ElevenLabs default library) */
 const VOICE_MAP = {
-    NARRATOR:  "JBFqnCBsd6RMkjVDRZzb",  // George — neutral narrator
-    CPT:       "TX3LPaxmHKxFdv7VOQHJ",  // Liam — deep, authoritative
-    FO:        "EXAVITQu4vr4xnSDxMaL",  // Sarah — clear, professional
-    ATC:       "onwK4e9ZLuTAKqWW03F9",  // Daniel — clipped, British
-    CC:        "ThT5KcBeYPX3keUQqHPh",  // Dorothy — warm, calm
-    PAX:       "AZnzlk1XvdvUeBnXmlld",  // Domi — casual
-    DISPATCH:  "onwK4e9ZLuTAKqWW03F9",  // reuse Daniel
-    OPS:       "onwK4e9ZLuTAKqWW03F9"   // reuse Daniel
+    NARRATOR:   "JBFqnCBsd6RMkjVDRZzb", // George (male)
+    CPT_M:      "TX3LPaxmHKxFdv7VOQHJ", // Liam (male)
+    CPT_F:      "EXAVITQu4vr4xnSDxMaL", // Sarah (female)
+    FO_M:       "onwK4e9ZLuTAKqWW03F9", // Daniel (male)
+    FO_F:       "EXAVITQu4vr4xnSDxMaL", // Sarah (female)
+    ATC_M:      "onwK4e9ZLuTAKqWW03F9", // Daniel (male)
+    ATC_F:      "ThT5KcBeYPX3keUQqHPh", // Dorothy (female)
+    CC_M:       "onwK4e9ZLuTAKqWW03F9", // Daniel (male)
+    CC_F:       "ThT5KcBeYPX3keUQqHPh", // Dorothy (female)
+    PAX_M:      "TX3LPaxmHKxFdv7VOQHJ", // Liam (male)
+    PAX_F:      "AZnzlk1XvdvUeBnXmlld", // Domi (female)
+    DISPATCH_M: "onwK4e9ZLuTAKqWW03F9", // Daniel (male)
+    DISPATCH_F: "ThT5KcBeYPX3keUQqHPh", // Dorothy (female)
+    OPS_M:      "onwK4e9ZLuTAKqWW03F9", // Daniel (male)
+    OPS_F:      "ThT5KcBeYPX3keUQqHPh"  // Dorothy (female)
 };
 
 const VOICE_SETTINGS = {
-    ATC:      { stability: 0.7, similarity_boost: 0.5 },
-    CPT:      { stability: 0.5, similarity_boost: 0.7 },
-    DISPATCH: { stability: 0.7, similarity_boost: 0.5 }
+    ATC_M:      { stability: 0.7, similarity_boost: 0.5 },
+    ATC_F:      { stability: 0.7, similarity_boost: 0.5 },
+    CPT_M:      { stability: 0.5, similarity_boost: 0.7 },
+    CPT_F:      { stability: 0.5, similarity_boost: 0.7 },
+    DISPATCH_M: { stability: 0.7, similarity_boost: 0.5 },
+    DISPATCH_F: { stability: 0.7, similarity_boost: 0.5 }
 };
+
+const ROLE_LABELS = Object.freeze({
+    NARRATOR: "Narrator",
+    CPT_M: "Captain (male)",
+    CPT_F: "Captain (female)",
+    FO_M: "First Officer (male)",
+    FO_F: "First Officer (female)",
+    ATC_M: "Air Traffic Control (male)",
+    ATC_F: "Air Traffic Control (female)",
+    CC_M: "Cabin Crew (male)",
+    CC_F: "Cabin Crew (female)",
+    PAX_M: "Passenger (male)",
+    PAX_F: "Passenger (female)",
+    DISPATCH_M: "Dispatcher (male)",
+    DISPATCH_F: "Dispatcher (female)",
+    OPS_M: "Operations (male)",
+    OPS_F: "Operations (female)"
+});
 
 const ICAO_LEVELS = { 1: "Pre-elementary", 2: "Elementary", 3: "Pre-operational", 4: "Operational", 5: "Extended", 6: "Expert" };
 const DEFAULT_ICAO_SCORE = {
@@ -125,27 +153,63 @@ const REMOTE_IMAGE_FALLBACK = Object.freeze([
     "https://images.pexels.com/photos/912050/pexels-photo-912050.jpeg"
 ]);
 
-const DEFAULT_ELEVEN_STORY_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
+const ELEVEN_SEGMENT_CONCURRENCY = 2;
+const ELEVEN_RETRY_LIMIT = 3;
+const ELEVEN_RETRY_BASE_DELAY_MS = 800;
 
 const imageLoadCache = new Map();
 
-const BURST_TEXTS = {
+const PART3_SET_KEYS = Object.freeze(["set1", "set2", "set3"]);
+
+const PART3_FALLBACK_CLIPS = Object.freeze({
     set1: [
-        "Ground reports low visibility on taxiway alpha.",
-        "Cabin crew requests additional briefing before departure.",
-        "Expect delay due to stand congestion."
+        { segments: [{ role: "ATC_M", text: "LOT four two one, hold short runway two niner, traffic landing." }] },
+        { segments: [{ role: "CC_F", text: "Captain, cabin is secured and passengers are seated for departure." }] },
+        { segments: [{ role: "DISPATCH_M", text: "Expect ten-minute delay due stand congestion at your destination." }] }
     ],
     set2: [
-        "ATC clears you direct to waypoint LOMKI, maintain flight level three five zero, expect descent in twenty minutes.",
-        "Weather radar shows convective activity ahead; evaluate deviate left by thirty nautical miles and coordinate with control.",
-        "A passenger medical issue requires cabin coordination, possible diversion, and fuel reassessment."
+        { segments: [{ role: "ATC_M", text: "LOT four two one, proceed direct LOMKI, climb flight level three five zero, expect descent in twenty minutes." }] },
+        {
+            segments: [
+                { role: "CPT_M", text: "Weather radar shows convective cells ahead; request deviation left by thirty miles." },
+                { role: "ATC_F", text: "Deviation approved, report back on course in ten minutes." }
+            ]
+        },
+        { segments: [{ role: "CC_F", text: "Passenger in row twelve reports chest pain. Cabin crew requests medical assistance and standby for possible diversion." }] }
     ],
     set3: [
-        "After departure from Warsaw you are informed of a hydraulic caution light and unusual flap indications. The captain asks for QRH actions while ATC offers vectors to hold. Cabin reports calm passengers, but forecast at destination includes gusty crosswinds and moderate turbulence. You must decide whether to continue, hold, or divert while balancing fuel, weather trend, and maintenance implications.",
-        "During descent into busy terminal airspace, CPDLC message conflicts with voice ATC clearance. You cross-check FMS, verify waypoint constraints, and brief expected STAR changes. Shortly after, TCAS traffic advisory appears while cabin prepares landing. Communicate priorities, crew tasks, and stabilization criteria.",
-        "On turnaround, documents reveal a load sheet discrepancy and a late crew change. Pushback is delayed, slot time at risk, and passengers are informed. Explain your coordination with dispatch, ground operations, and ATC to restore compliance and maintain safety margins before departure."
+        {
+            segments: [
+                { role: "CPT_M", text: "Hydraulic caution is on, confirm system pressure trend." },
+                { role: "FO_F", text: "Pressure is dropping slowly, QRH non-normal checklist is open." },
+                { role: "CPT_M", text: "Tell ATC we need vectors and delay approach." },
+                { role: "FO_F", text: "ATC informed, we are cleared to hold at NERSA." },
+                { role: "CPT_M", text: "Coordinate with cabin and brief possible diversion." },
+                { role: "FO_F", text: "Cabin briefed, fuel allows one hold and diversion to Krakow." }
+            ]
+        },
+        {
+            segments: [
+                { role: "ATC_M", text: "LOT four two one, descend flight level one eight zero, reduce speed two one zero knots." },
+                { role: "FO_F", text: "Descending one eight zero, speed two one zero, LOT four two one." },
+                { role: "ATC_M", text: "Traffic twelve o'clock, seven miles, same level." },
+                { role: "FO_F", text: "Traffic in sight, we will maintain visual separation." },
+                { role: "ATC_M", text: "After traffic, turn right heading two four zero for sequencing." },
+                { role: "FO_F", text: "Right heading two four zero, LOT four two one." }
+            ]
+        },
+        {
+            segments: [
+                { role: "DISPATCH_M", text: "Your destination crosswind is now above company limit." },
+                { role: "CPT_F", text: "Copy, evaluate alternate weather and handling status." },
+                { role: "DISPATCH_M", text: "Krakow reports stable winds and full emergency services available." },
+                { role: "CPT_F", text: "Understood, preparing diversion plan and fuel check." },
+                { role: "DISPATCH_M", text: "Slot and stand confirmed at Krakow, continue coordination with ATC." },
+                { role: "CPT_F", text: "Confirmed, we are diverting and will advise final ETA shortly." }
+            ]
+        }
     ]
-};
+});
 
 let root;
 let onDataUpdated;
@@ -166,6 +230,14 @@ const runtime = {
         part4: ["differences captured", "safety interpretation", "operational recommendation"]
     },
     story: { sub1: null, sub2: null },
+    storyTokens: { sub1: 0, sub2: 0 },
+    storyProgress: { sub1: null, sub2: null },
+    storyBuildJobs: { sub1: null, sub2: null },
+    storyQueue: { token: 0, promise: null },
+    part3: { set1: null, set2: null, set3: null },
+    part3BuildJobs: { set1: null, set2: null, set3: null },
+    part3SpeechPlays: {},
+    sessionToken: 0,
     pexelsAttribution: {}
 };
 
@@ -235,6 +307,10 @@ function setState(next) {
     }
     if (instrEl && meta) {
         instrEl.textContent = meta.instruction;
+    }
+    if (previous === "IDLE" && next !== "IDLE") {
+        runtime.sessionToken += 1;
+        startPart2StoryQueue(runtime.sessionToken);
     }
     updateDevControls();
     updateToc();
@@ -335,6 +411,81 @@ function extractJSON(text) {
         if (candidate) return candidate;
     }
     return null;
+}
+
+function normalizeTopicPinpoint(value) {
+    return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function uniqueTopicPinpoints(values, limit = 24) {
+    const result = [];
+    const seen = new Set();
+    for (const value of values || []) {
+        const cleaned = String(value || "").trim();
+        if (!cleaned) continue;
+        const key = normalizeTopicPinpoint(cleaned);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        result.push(cleaned);
+        if (result.length >= limit) break;
+    }
+    return result;
+}
+
+function deriveTopicPinpoints(primary = [], segments = []) {
+    const fromPrimary = Array.isArray(primary) ? primary : [];
+    const fromSegments = Array.isArray(segments)
+        ? segments
+            .map((segment) => String(segment?.text || "").trim())
+            .filter(Boolean)
+            .slice(0, 8)
+            .map((line) => line.split(/[.!?]/)[0].trim())
+            .filter(Boolean)
+        : [];
+    return uniqueTopicPinpoints([...fromPrimary, ...fromSegments], 12);
+}
+
+function collectPreviousPart2TopicPinpoints(limit = 40) {
+    const history = getHistory();
+    const dates = Object.keys(history).sort().reverse();
+    const collected = [];
+    for (const date of dates) {
+        const part2 = history[date]?.elp?.part2TopicPinpoints;
+        if (!part2) continue;
+        const combined = Array.isArray(part2.combined)
+            ? part2.combined
+            : [
+                ...(Array.isArray(part2.sub1) ? part2.sub1 : []),
+                ...(Array.isArray(part2.sub2) ? part2.sub2 : [])
+            ];
+        if (!combined.length) continue;
+        collected.push(...combined);
+        if (collected.length >= limit * 2) break;
+    }
+    return uniqueTopicPinpoints(collected, limit);
+}
+
+function savePart2TopicPinpointsForLabel(label, topicPinpoints) {
+    const current = getTodayElp()?.part2TopicPinpoints || {};
+    const nextSub1 = label === "sub1"
+        ? uniqueTopicPinpoints(topicPinpoints, 12)
+        : (Array.isArray(current.sub1) ? current.sub1 : []);
+    const nextSub2 = label === "sub2"
+        ? uniqueTopicPinpoints(topicPinpoints, 12)
+        : (Array.isArray(current.sub2) ? current.sub2 : []);
+    const combined = uniqueTopicPinpoints([...nextSub1, ...nextSub2], 24);
+    saveElpPatch({
+        part2TopicPinpoints: {
+            sub1: nextSub1,
+            sub2: nextSub2,
+            combined,
+            updatedAt: new Date().toISOString()
+        }
+    });
 }
 
 function getOfflineWarning() {
@@ -690,14 +841,153 @@ async function buildWarmupQuestions() {
     }
 }
 
+function normalizeStoryRole(role) {
+    const raw = String(role || "").trim().toUpperCase();
+    if (!raw) return "NARRATOR";
+    if (raw === "AMBIENT") return null;
+
+    const aliases = {
+        CPT: "CPT_M",
+        FO: "FO_F",
+        ATC: "ATC_M",
+        CC: "CC_F",
+        PAX: "PAX_M",
+        DISPATCH: "DISPATCH_M",
+        OPS: "OPS_M",
+        CAPTAIN: "CPT_M",
+        FIRST_OFFICER: "FO_F",
+        CABIN_CREW: "CC_F",
+        PASSENGER: "PAX_M"
+    };
+
+    const mapped = aliases[raw] || raw;
+    return VOICE_MAP[mapped] ? mapped : "NARRATOR";
+}
+
+function sanitizeStorySegments(rawSegments = []) {
+    if (!Array.isArray(rawSegments) || !rawSegments.length) {
+        return [];
+    }
+    return rawSegments
+        .filter((segment) => segment && segment.text)
+        .map((segment) => {
+            const role = normalizeStoryRole(segment.role);
+            if (!role) return null;
+            return {
+                role,
+                text: String(segment.text).trim()
+            };
+        })
+        .filter((segment) => segment && segment.text.length > 0);
+}
+
 function segmentsToScript(segments) {
-    return segments.map(s =>
-        s.role === "AMBIENT" ? `[${s.text}]` : `${s.role}: ${s.text}`
-    ).join("\n");
+    return segments.map((segment) => {
+        const role = normalizeStoryRole(segment.role);
+        const label = ROLE_LABELS[role] || role;
+        return `${label}: ${segment.text}`;
+    }).join("\n");
 }
 
 function segmentsToPlainText(segments) {
-    return segments.filter(s => s.role !== "AMBIENT").map(s => s.text).join(" ");
+    return segments.map((segment) => segment.text).join(" ");
+}
+
+function setStoryProgress(label, patch = {}) {
+    runtime.storyProgress[label] = {
+        ...(runtime.storyProgress[label] || {}),
+        ...patch,
+        updatedAt: Date.now()
+    };
+}
+
+function createPart2ProgressLoader(container, heading = "Generating listening story...") {
+    const overlay = document.createElement("div");
+    overlay.className = "ai-loading-overlay";
+    overlay.innerHTML = `
+        <div class="ai-loading-inner elp-story-loader">
+            <div class="ai-loading-msg">${escapeHTML(heading)}</div>
+            <div class="elp-story-loader-status" data-role="status">Preparing request...</div>
+            <div class="elp-story-loader-track">
+                <div class="elp-story-loader-fill" data-role="fill" style="width:0%"></div>
+            </div>
+            <div class="elp-story-loader-percent" data-role="percent">0%</div>
+        </div>
+    `;
+    container.prepend(overlay);
+
+    const statusEl = overlay.querySelector('[data-role="status"]');
+    const fillEl = overlay.querySelector('[data-role="fill"]');
+    const percentEl = overlay.querySelector('[data-role="percent"]');
+
+    return {
+        update(progress) {
+            if (!progress) return;
+            const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+            if (statusEl && progress.message) statusEl.textContent = progress.message;
+            if (fillEl) fillEl.style.width = `${percent}%`;
+            if (percentEl) percentEl.textContent = `${Math.round(percent)}%`;
+        },
+        remove() {
+            overlay.remove();
+        }
+    };
+}
+
+function waitMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isElevenConcurrencyError(err) {
+    const message = String(err?.message || "").toLowerCase();
+    return message.includes("too many concurrent requests")
+        || message.includes("concurrent_limit_exceeded")
+        || message.includes("too_many_concurrent_requests");
+}
+
+async function runWithElevenRetry(task, debugContext = {}) {
+    for (let attempt = 1; attempt <= ELEVEN_RETRY_LIMIT; attempt += 1) {
+        try {
+            return await task();
+        } catch (err) {
+            const retryable = isElevenConcurrencyError(err);
+            if (!retryable || attempt === ELEVEN_RETRY_LIMIT) {
+                throw err;
+            }
+            const delay = ELEVEN_RETRY_BASE_DELAY_MS * (2 ** (attempt - 1));
+            debugLog("elp.buildPart2Story", "Segment hit ElevenLabs concurrency limit; retrying", {
+                ...debugContext,
+                attempt,
+                nextDelayMs: delay,
+                error: err?.message || String(err)
+            }, "warn");
+            await waitMs(delay);
+        }
+    }
+    return null;
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+    if (!Array.isArray(items) || !items.length) {
+        return [];
+    }
+    const safeConcurrency = Math.max(1, Math.min(concurrency, items.length));
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    const worker = async () => {
+        while (true) {
+            const currentIndex = nextIndex;
+            nextIndex += 1;
+            if (currentIndex >= items.length) {
+                return;
+            }
+            results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+        }
+    };
+
+    await Promise.all(Array.from({ length: safeConcurrency }, () => worker()));
+    return results;
 }
 
 async function concatenateAudioBlobs(blobs) {
@@ -783,57 +1073,114 @@ function writeString(view, offset, str) {
     for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
-async function buildPart2Story(label) {
+async function buildPart2Story(label, options = {}) {
     const settings = getSettings();
     const anthropicKey = settings.apiKeys.anthropic;
     const elevenKey = settings.apiKeys.elevenlabs;
     const fallbackSegments = [
         { role: "NARRATOR", text: label === "sub1"
             ? "Boarding starts, ATC flow restrictions apply, and crew manages minor technical note before pushback."
-            : "Mid-flight non-standard event escalates with weather and passenger pressure, requiring coordinated crew response." }
+            : "Continuation: the same flight now faces a non-standard event with weather and cabin pressure, requiring coordinated emergency handling." }
     ];
     let segments = fallbackSegments;
     let pinpoints = runtime.pinpoints[label];
+    let topicPinpoints = deriveTopicPinpoints(pinpoints, fallbackSegments);
+    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+    const previousTopics = label === "sub1" ? collectPreviousPart2TopicPinpoints(40) : [];
+    const previousTopicBlock = previousTopics.length
+        ? previousTopics.map((topic, index) => `${index + 1}. ${topic}`).join("\n")
+        : "None";
+
     debugLog("elp.buildPart2Story", "Building story", { tab: "elp", label });
+    setStoryProgress(label, { phase: "story", percent: 5, message: "Generating story script..." });
+    if (onProgress) onProgress(runtime.storyProgress[label]);
 
     if (anthropicKey) {
         try {
-            const prompt = `Write a detailed, immersive aviation fiction story (story ${label}) that takes approximately 6–10 minutes when spoken aloud (roughly 1,500–2,500 words of dialogue and narration).
+            const prompt = label === "sub1"
+                ? `Write Part 1 of one continuous aviation fiction story for ELP listening practice (story ${label}).
+Part 1 should take approximately 4-7 minutes when spoken aloud.
 
-OUTPUT FORMAT — return strict JSON only:
+OUTPUT FORMAT - return strict JSON only:
 {
   "segments": [
     { "role": "NARRATOR", "text": "..." },
-    { "role": "CPT", "text": "..." },
-    { "role": "AMBIENT", "text": "short sound-effect description" },
+    { "role": "CPT_M", "text": "..." },
+    { "role": "FO_F", "text": "..." },
     ...
   ],
-  "pinpoints": ["checkpoint 1", "checkpoint 2", ...]
+  "pinpoints": ["checkpoint 1", "checkpoint 2", ...],
+  "topicPinpoints": ["short theme/topic phrase", "..."]
 }
 
 SEGMENT RULES:
 - Each segment has exactly one "role" and one "text".
-- Valid roles: NARRATOR, CPT, FO, ATC, CC, PAX, DISPATCH, OPS, AMBIENT.
-- Do NOT put role prefixes inside the text — the role field handles that.
-- AMBIENT segments are short sound-effect descriptions (≤ 12 words) that will be rendered as audio, e.g. "engine spoolup with rain hitting the windshield", "seatbelt chime followed by cabin PA click". They are NOT read aloud — they become generated sound effects.
-- All other roles are spoken dialogue or narration — write natural speech only.
+- Valid roles: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- Do NOT use AMBIENT or sound-effect roles.
+- Do NOT put role prefixes inside the text - the role field handles that.
+- All segments are spoken dialogue or narration.
 
 STORY STRUCTURE:
-Divide the story into clear phases of flight (pre-departure, taxi, takeoff, cruise, descent/approach, landing or emergency resolution). Each phase should advance the plot and build tension. Let scenes breathe with detail.
+Part 1 should cover pre-departure through stable cruise setup and end with unresolved risk/tension that naturally leads to Part 2.
 
 DIALOGUE:
-- CPT (Captain) and FO (First Officer) have a working dynamic — contrasting styles that surface under pressure.
+- CPT and FO have a working dynamic - contrasting styles that surface under pressure.
 - ATC transmissions use realistic phraseology: callsigns, headings, altitudes, readbacks. Short, clipped, professional.
-- At least one cabin crew member (CC) has a moment beyond announcements.
-- At least one passenger (PAX) perspective anchors the cabin side.
+- At least one cabin crew member has a moment beyond announcements.
+- At least one passenger perspective anchors the cabin side.
 
 REALISM:
 Include proper aviation terminology: callsigns, flight levels, squawk codes, STAR/SID names, runway designators, standard ATC phrases, checklists, CRM dialogue.
 
-AMBIENT LAYERING:
-Scatter AMBIENT segments generously — sounds at the gate differ from cruise, which differ from an approach in deteriorating weather.
+SPEAKER CLARITY:
+- The first narrator line must introduce each speaking role in plain English, for example: "Cabin Crew (CC_F): Marta."
+- Before the first spoken line of each non-narrator role, add a short NARRATOR line that identifies that speaker by role and name.
+- Keep speaker names consistent throughout the story.
 
-PINPOINTS: 8–15 short checkpoint phrases capturing key plot or safety moments a listener should recall.`;
+PINPOINTS:
+- "pinpoints": 8-15 short checkpoints capturing plot/safety moments a listener should recall from Part 1.
+- "topicPinpoints": 6-12 concise topic labels (for repetition control in future stories).
+
+AVOID TOPIC OVERLAP WITH PREVIOUS STORIES:
+${previousTopicBlock}
+Do not reuse these same themes/topics unless absolutely required for realism.`
+                : `Write Part 2 as a direct continuation of the SAME story and SAME flight from Part 1 (story ${label}).
+Part 2 should take approximately 4-7 minutes when spoken aloud.
+
+Part 1 script (maintain continuity of timeline, names, aircraft context, and unresolved threads):
+${runtime.story.sub1?.script || "N/A"}
+
+Part 1 pinpoints:
+${JSON.stringify(runtime.story.sub1?.pinpoints || runtime.pinpoints.sub1 || [])}
+
+OUTPUT FORMAT - return strict JSON only:
+{
+  "segments": [
+    { "role": "NARRATOR", "text": "..." },
+    { "role": "CPT_M", "text": "..." },
+    { "role": "FO_F", "text": "..." },
+    ...
+  ],
+  "pinpoints": ["checkpoint 1", "checkpoint 2", ...],
+  "topicPinpoints": ["short theme/topic phrase", "..."]
+}
+
+SEGMENT RULES:
+- Each segment has exactly one "role" and one "text".
+- Valid roles: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- Do NOT use AMBIENT or sound-effect roles.
+- Do NOT put role prefixes inside the text - the role field handles that.
+- All segments are spoken dialogue or narration.
+
+PART 2 REQUIREMENTS:
+- Center on non-standard or emergency evolution (technical, weather, cabin, medical, ATC complexity, or operational pressure), then coordinated handling and outcome.
+- Preserve speaker names and role behavior from Part 1.
+- Keep ATC phraseology realistic and concise.
+- Show CRM decisions, threat/risk assessment, communication quality, and final resolution path.
+
+PINPOINTS:
+- "pinpoints": 8-15 short checkpoints focused on non-standard/emergency progression and handling outcomes.
+- "topicPinpoints": 6-12 concise topic labels for this continuation segment.`;
 
             const text = await askClaude({
                 apiKey: anthropicKey,
@@ -846,10 +1193,16 @@ PINPOINTS: 8–15 short checkpoint phrases capturing key plot or safety moments 
             const parsed = extractJSON(text);
             if (parsed) {
                 if (Array.isArray(parsed.segments) && parsed.segments.length) {
-                    segments = parsed.segments.filter(s => s?.role && s?.text);
+                    const cleaned = sanitizeStorySegments(parsed.segments);
+                    if (cleaned.length) {
+                        segments = cleaned;
+                    }
                 }
                 if (Array.isArray(parsed.pinpoints) && parsed.pinpoints.length) {
                     pinpoints = parsed.pinpoints;
+                }
+                if (Array.isArray(parsed.topicPinpoints) && parsed.topicPinpoints.length) {
+                    topicPinpoints = parsed.topicPinpoints;
                 }
             }
         } catch (err) {
@@ -861,36 +1214,68 @@ PINPOINTS: 8–15 short checkpoint phrases capturing key plot or safety moments 
 
     const script = segmentsToScript(segments);
     runtime.pinpoints[label] = pinpoints;
+    topicPinpoints = deriveTopicPinpoints(topicPinpoints.length ? topicPinpoints : pinpoints, segments);
+    savePart2TopicPinpointsForLabel(label, topicPinpoints);
+
+    setStoryProgress(label, {
+        phase: "tts",
+        percent: 15,
+        completed: 0,
+        total: segments.length,
+        message: `Generating speech segments (0/${segments.length})...`
+    });
+    if (onProgress) onProgress(runtime.storyProgress[label]);
 
     if (elevenKey) {
         try {
-            debugLog("elp.buildPart2Story", `Generating audio for ${segments.length} segments`, { tab: "elp", label });
-            const blobPromises = segments.map((seg, i) => {
-                const ctx = { tab: "elp", operation: "buildPart2Story.tts", label, segment: i, role: seg.role };
-                if (seg.role === "AMBIENT") {
-                    return generateSoundEffect({
+            debugLog("elp.buildPart2Story", `Generating audio for ${segments.length} segments`, {
+                tab: "elp",
+                label,
+                concurrency: ELEVEN_SEGMENT_CONCURRENCY
+            });
+            const blobs = await mapWithConcurrency(segments, ELEVEN_SEGMENT_CONCURRENCY, async (seg, i) => {
+                const role = normalizeStoryRole(seg.role);
+                const ctx = { tab: "elp", operation: "buildPart2Story.tts", label, segment: i, role };
+                try {
+                    const voiceId = VOICE_MAP[role] || VOICE_MAP.NARRATOR;
+                    const voiceSettings = VOICE_SETTINGS[role] || undefined;
+                    const blob = await runWithElevenRetry(() => generateSpeechWithElevenLabs({
                         apiKey: elevenKey,
                         text: seg.text,
-                        durationSeconds: 3,
+                        voiceId,
+                        voiceSettings,
                         debugContext: ctx
-                    }).catch(() => null);
+                    }), ctx);
+
+                    const current = runtime.storyProgress[label] || { completed: 0, total: segments.length };
+                    const completed = Math.min((current.completed || 0) + 1, segments.length);
+                    const percent = 15 + ((completed / Math.max(1, segments.length)) * 80);
+                    setStoryProgress(label, {
+                        phase: "tts",
+                        percent,
+                        completed,
+                        total: segments.length,
+                        message: `Generating speech segments (${completed}/${segments.length})...`
+                    });
+                    if (onProgress) onProgress(runtime.storyProgress[label]);
+
+                    return blob;
+                } catch (err) {
+                    debugLog("elp.buildPart2Story", "Segment audio failed, skipping segment", {
+                        ...ctx,
+                        error: err?.message || String(err)
+                    }, "warn");
+                    return null;
                 }
-                const voiceId = VOICE_MAP[seg.role] || VOICE_MAP.NARRATOR;
-                const voiceSettings = VOICE_SETTINGS[seg.role] || undefined;
-                return generateSpeechWithElevenLabs({
-                    apiKey: elevenKey,
-                    text: seg.text,
-                    voiceId,
-                    voiceSettings,
-                    debugContext: ctx
-                }).catch(() => null);
             });
 
-            const blobs = (await Promise.all(blobPromises)).filter(Boolean);
-            if (blobs.length) {
-                const combined = await concatenateAudioBlobs(blobs);
+            const successfulBlobs = blobs.filter(Boolean);
+            if (successfulBlobs.length) {
+                const combined = await concatenateAudioBlobs(successfulBlobs);
                 if (combined) {
-                    return { script, segments, pinpoints, audioSrc: URL.createObjectURL(combined) };
+                    setStoryProgress(label, { phase: "done", percent: 100, message: "Story audio is ready." });
+                    if (onProgress) onProgress(runtime.storyProgress[label]);
+                    return { script, segments, pinpoints, topicPinpoints, audioSrc: URL.createObjectURL(combined) };
                 }
             }
             debugLog("elp.buildPart2Story", "Audio stitching produced no output, falling back", { tab: "elp", label }, "warn");
@@ -903,7 +1288,277 @@ PINPOINTS: 8–15 short checkpoint phrases capturing key plot or safety moments 
 
     const plainText = segmentsToPlainText(segments);
     speakEnglishFallback(plainText, { tab: "elp", operation: "buildPart2Story.fallbackTts", label });
-    return { script, segments, pinpoints, audioSrc: null };
+    setStoryProgress(label, { phase: "done", percent: 100, message: "Using browser speech fallback." });
+    if (onProgress) onProgress(runtime.storyProgress[label]);
+    return { script, segments, pinpoints, topicPinpoints, audioSrc: null };
+}
+async function ensurePart2Story(label, token = runtime.sessionToken, options = {}) {
+    if (label === "sub2" && (!runtime.story.sub1 || runtime.storyTokens.sub1 !== token)) {
+        await ensurePart2Story("sub1", token);
+    }
+
+    if (runtime.story[label] && runtime.storyTokens[label] === token) {
+        return runtime.story[label];
+    }
+
+    const existingJob = runtime.storyBuildJobs[label];
+    if (existingJob && existingJob.token === token) {
+        return existingJob.promise;
+    }
+
+    const promise = (async () => {
+        const story = await buildPart2Story(label, options);
+        if (runtime.sessionToken === token) {
+            runtime.story[label] = story;
+            runtime.storyTokens[label] = token;
+        }
+        return (runtime.storyTokens[label] === token && runtime.story[label]) ? runtime.story[label] : story;
+    })();
+
+    runtime.storyBuildJobs[label] = { token, promise };
+
+    try {
+        return await promise;
+    } finally {
+        const activeJob = runtime.storyBuildJobs[label];
+        if (activeJob && activeJob.token === token && activeJob.promise === promise) {
+            runtime.storyBuildJobs[label] = null;
+        }
+    }
+}
+
+function startPart2StoryQueue(token = runtime.sessionToken) {
+    if (state === "IDLE") {
+        return;
+    }
+    if (runtime.storyQueue.promise && runtime.storyQueue.token === token) {
+        return;
+    }
+
+    runtime.storyQueue = {
+        token,
+        promise: (async () => {
+            try {
+                debugLog("elp.storyQueue", "Starting Part 2 story queue", { tab: "elp", token });
+                await ensurePart2Story("sub1", token);
+                await ensurePart2Story("sub2", token);
+                debugLog("elp.storyQueue", "Part 2 story queue completed", { tab: "elp", token });
+            } catch (err) {
+                debugLog("elp.storyQueue", "Part 2 story queue failed", {
+                    tab: "elp",
+                    token,
+                    error: err?.message || String(err)
+                }, "warn");
+            } finally {
+                if (runtime.storyQueue.token === token) {
+                    runtime.storyQueue.promise = null;
+                }
+            }
+        })()
+    };
+}
+
+function getPart3SetKey(stateName = state) {
+    if (stateName === "PART3_SET1" || stateName === "PART3_SET1_DESCRIBE") return "set1";
+    if (stateName === "PART3_SET2" || stateName === "PART3_SET2_DESCRIBE") return "set2";
+    if (stateName === "PART3_SET3" || stateName === "PART3_SET3_DESCRIBE") return "set3";
+    return null;
+}
+
+function part3SpecForSet(setKey) {
+    if (setKey === "set1") {
+        return "Create exactly 3 short recordings. Each recording is one utterance of 1-2 sentences.";
+    }
+    if (setKey === "set2") {
+        return "Create exactly 3 medium recordings. Each recording is either: (A) one speaker with max 4 sentences, OR (B) a short 2-line dialogue (one sentence per speaker).";
+    }
+    return "Create exactly 3 dialogue recordings. In each recording, exactly two speakers speak 3 utterances each (6 lines total, alternating turns).";
+}
+
+function part3ClipToPlainText(clip) {
+    return segmentsToPlainText(clip?.segments || []);
+}
+
+function part3ClipPlayCount(clipId) {
+    return Number(runtime.part3SpeechPlays[clipId] || 0);
+}
+
+function canPlayPart3Clip(clip, maxPlays = 2) {
+    if (!clip) return false;
+    return part3ClipPlayCount(clip.id) < maxPlays;
+}
+
+async function playPart3Clip(clip, maxPlays = 2) {
+    if (!clip) throw new Error("Clip not found.");
+    if (!canPlayPart3Clip(clip, maxPlays)) {
+        throw new Error("Playback limit reached for this clip.");
+    }
+
+    if (clip.audioSrc) {
+        await playback.play({ id: clip.id, src: clip.audioSrc, maxPlays });
+        const plays = part3ClipPlayCount(clip.id) + 1;
+        runtime.part3SpeechPlays[clip.id] = plays;
+        return { plays, remaining: Math.max(0, maxPlays - plays) };
+    }
+
+    // Browser fallback mode when ElevenLabs audio is unavailable.
+    const text = part3ClipToPlainText(clip);
+    if (!text) throw new Error("Clip text is empty.");
+    speakEnglishFallback(text, { tab: "elp", operation: "part3.playFallback", clipId: clip.id });
+    const plays = part3ClipPlayCount(clip.id) + 1;
+    runtime.part3SpeechPlays[clip.id] = plays;
+    return { plays, remaining: Math.max(0, maxPlays - plays) };
+}
+
+function normalizePart3Clips(rawClips, setKey) {
+    const source = Array.isArray(rawClips) ? rawClips.slice(0, 3) : [];
+            const clips = source
+        .map((clip, idx) => {
+            const segments = sanitizeStorySegments(clip?.segments || []);
+            if (!segments.length) return null;
+            return {
+                id: `part3_s${runtime.sessionToken}_${setKey}_clip${idx + 1}`,
+                title: String(clip?.title || `Clip ${idx + 1}`).trim() || `Clip ${idx + 1}`,
+                segments
+            };
+        })
+        .filter(Boolean);
+    return clips;
+}
+
+function fallbackPart3Set(setKey) {
+    const fallbackClips = PART3_FALLBACK_CLIPS[setKey] || PART3_FALLBACK_CLIPS.set1;
+    return normalizePart3Clips(fallbackClips, setKey);
+}
+
+async function buildPart3Set(setKey) {
+    const settings = getSettings();
+    const anthropicKey = settings.apiKeys.anthropic;
+    const elevenKey = settings.apiKeys.elevenlabs;
+    let clips = fallbackPart3Set(setKey);
+
+    if (anthropicKey) {
+        try {
+            const prompt = `Generate ELP Part 3 listening materials in strict JSON.
+
+Output JSON only:
+{
+  "clips": [
+    {
+      "title": "short label",
+      "segments": [
+        { "role": "ATC_M", "text": "..." }
+      ]
+    }
+  ]
+}
+
+Global rules:
+- Return exactly 3 clips.
+- Valid roles only: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- English only, realistic aviation operational phraseology.
+- No explanations, no markdown, no extra keys.
+
+Set: ${setKey}
+Set-specific format:
+${part3SpecForSet(setKey)}`;
+
+            const text = await askClaude({
+                apiKey: anthropicKey,
+                prompt,
+                maxTokens: 2200,
+                temperature: 0.35,
+                timeoutMs: 90000,
+                debugContext: { tab: "elp", operation: "buildPart3Set", setKey }
+            });
+            const parsed = extractJSON(text);
+            const parsedClips = normalizePart3Clips(parsed?.clips, setKey);
+            if (parsedClips.length === 3) {
+                clips = parsedClips;
+            }
+        } catch (err) {
+            debugLog("elp.buildPart3Set", "Part 3 text generation failed, fallback used", {
+                tab: "elp",
+                setKey,
+                error: err?.message || String(err)
+            }, "warn");
+        }
+    }
+
+    if (elevenKey) {
+        try {
+            const withAudio = await Promise.all(clips.map(async (clip) => {
+                const segmentBlobs = await mapWithConcurrency(clip.segments, 2, async (segment, segmentIndex) => {
+                    const role = normalizeStoryRole(segment.role);
+                    const voiceId = VOICE_MAP[role] || VOICE_MAP.NARRATOR;
+                    const voiceSettings = VOICE_SETTINGS[role] || undefined;
+                    return runWithElevenRetry(() => generateSpeechWithElevenLabs({
+                        apiKey: elevenKey,
+                        text: segment.text,
+                        voiceId,
+                        voiceSettings,
+                        debugContext: { tab: "elp", operation: "buildPart3Set.tts", setKey, clipId: clip.id, segmentIndex, role }
+                    }), { tab: "elp", operation: "buildPart3Set.tts", setKey, clipId: clip.id, segmentIndex, role })
+                        .catch(() => null);
+                });
+
+                const okBlobs = segmentBlobs.filter(Boolean);
+                if (!okBlobs.length) {
+                    return { ...clip, audioSrc: null };
+                }
+                const stitched = await concatenateAudioBlobs(okBlobs);
+                return { ...clip, audioSrc: stitched ? URL.createObjectURL(stitched) : null };
+            }));
+            clips = withAudio;
+        } catch (err) {
+            debugLog("elp.buildPart3Set", "Part 3 TTS failed, fallback speech mode", {
+                tab: "elp",
+                setKey,
+                error: err?.message || String(err)
+            }, "warn");
+            clips = clips.map((clip) => ({ ...clip, audioSrc: null }));
+        }
+    } else {
+        clips = clips.map((clip) => ({ ...clip, audioSrc: null }));
+    }
+
+    return {
+        setKey,
+        clips
+    };
+}
+
+async function ensurePart3Set(setKey, token = runtime.sessionToken) {
+    if (!PART3_SET_KEYS.includes(setKey)) {
+        throw new Error(`Unknown Part 3 set: ${setKey}`);
+    }
+
+    if (runtime.part3[setKey]) {
+        return runtime.part3[setKey];
+    }
+
+    const existingJob = runtime.part3BuildJobs[setKey];
+    if (existingJob && existingJob.token === token) {
+        return existingJob.promise;
+    }
+
+    const promise = (async () => {
+        const built = await buildPart3Set(setKey);
+        if (runtime.sessionToken === token) {
+            runtime.part3[setKey] = built;
+        }
+        return runtime.part3[setKey] || built;
+    })();
+
+    runtime.part3BuildJobs[setKey] = { token, promise };
+    try {
+        return await promise;
+    } finally {
+        const active = runtime.part3BuildJobs[setKey];
+        if (active && active.promise === promise) {
+            runtime.part3BuildJobs[setKey] = null;
+        }
+    }
 }
 
 function getUsedPexelsIds() {
@@ -1105,9 +1760,18 @@ async function runCurrentState(options = {}) {
         }
 
         case "PART2_SUB1_PLAY": {
-            const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Generating listening story\u2026");
-            runtime.story.sub1 = await buildPart2Story("sub1");
-            loader.remove();
+            const progressLoader = createPart2ProgressLoader(root.querySelector("#elpContent"), "Generating listening story...");
+            const progressTimer = setInterval(() => {
+                progressLoader.update(runtime.storyProgress.sub1);
+            }, 120);
+            try {
+                runtime.story.sub1 = await ensurePart2Story("sub1", runtime.sessionToken, {
+                    onProgress: (progress) => progressLoader.update(progress)
+                });
+            } finally {
+                clearInterval(progressTimer);
+                progressLoader.remove();
+            }
             if (isDev) {
                 renderMain(`<h3>Part 2 Sub-part 1 (Play once)</h3><pre style="white-space:pre-wrap">${escapeHTML(runtime.story.sub1.script)}</pre><p class="hint">Use Play button once.</p>`);
             } else {
@@ -1184,13 +1848,22 @@ async function runCurrentState(options = {}) {
         }
 
         case "PART2_SUB2_PLAY": {
-            const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Generating second story\u2026");
-            runtime.story.sub2 = await buildPart2Story("sub2");
-            loader.remove();
+            const progressLoader = createPart2ProgressLoader(root.querySelector("#elpContent"), "Generating story continuation...");
+            const progressTimer = setInterval(() => {
+                progressLoader.update(runtime.storyProgress.sub2);
+            }, 120);
+            try {
+                runtime.story.sub2 = await ensurePart2Story("sub2", runtime.sessionToken, {
+                    onProgress: (progress) => progressLoader.update(progress)
+                });
+            } finally {
+                clearInterval(progressTimer);
+                progressLoader.remove();
+            }
             if (isDev) {
                 renderMain(`<h3>Part 2 Sub-part 2 (Play once)</h3><pre style="white-space:pre-wrap">${escapeHTML(runtime.story.sub2.script)}</pre><p class="hint">Continuation with non-standard event handling.</p>`);
             } else {
-                renderMain(`<h3>Second Listening Story</h3><p class="hint">Press Play to listen. You will hear it only once.</p>`);
+                renderMain(`<h3>Story Continuation</h3><p class="hint">Press Play to listen to the continuation. You will hear it only once.</p>`);
                 if (runtime.story.sub2.audioSrc) {
                     const area = root.querySelector("#elpActionArea");
                     if (area) {
@@ -1267,13 +1940,74 @@ async function runCurrentState(options = {}) {
         case "PART3_SET3": {
             const key = state === "PART3_SET1" ? "set1" : state === "PART3_SET2" ? "set2" : "set3";
             const setNum = key === "set1" ? 1 : key === "set2" ? 2 : 3;
-            const list = BURST_TEXTS[key];
+            const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Generating communication recordings\u2026");
+            const part3Set = await ensurePart3Set(key, runtime.sessionToken);
+            loader.remove();
+            const clips = part3Set?.clips || [];
+            const lines = clips.map((clip) => part3ClipToPlainText(clip));
             if (isDev) {
-                renderMain(`<h3>${state.replace("_", " ")}</h3><ol>${list.map((line) => `<li>${line}</li>`).join("")}</ol><p class="hint">Set replay limit: 2 plays max each clip.</p>`);
+                renderMain(`<h3>${state.replace("_", " ")}</h3><ol>${lines.map((line) => `<li>${escapeHTML(line)}</li>`).join("")}</ol><p class="hint">Set replay limit: 2 plays max each clip.</p>`);
             } else {
-                renderMain(`<h3>Communication Set ${setNum}</h3>${renderQuestionList(list)}`);
+                renderMain(`<h3>Communication Set ${setNum}</h3><p>Listen to all three clips. Each clip can be played maximum 2 times. Then describe what you understood.</p>`);
+
+                const area = root.querySelector("#elpActionArea");
+                if (area) {
+                    const renderPart3Controls = () => {
+                        const playedAllOnce = clips.every((clip) => part3ClipPlayCount(clip.id) >= 1);
+
+                        const rows = clips.map((clip, index) => {
+                            const plays = part3ClipPlayCount(clip.id);
+                            const disabled = !canPlayPart3Clip(clip, 2);
+                            return `
+                                <div class="part3-clip-row">
+                                    <span class="part3-clip-label">Clip ${index + 1}</span>
+                                    <button class="btn btn-secondary" data-clip="${clip.id}" ${disabled ? "disabled" : ""}>Play</button>
+                                    <span class="hint">${plays}/2</span>
+                                </div>
+                            `;
+                        }).join("");
+
+                        area.innerHTML = `
+                            <div class="part3-clip-controls">
+                                ${rows}
+                                <button id="part3Continue" class="btn btn-primary btn-lg" ${playedAllOnce ? "" : "disabled"}>Continue</button>
+                                ${playedAllOnce ? "" : '<p class="hint">Play each clip at least once to continue.</p>'}
+                            </div>
+                        `;
+
+                        area.querySelectorAll("[data-clip]").forEach((btn) => {
+                            btn.addEventListener("click", async () => {
+                                if (busy) return;
+                                const clip = clips.find((c) => c.id === btn.dataset.clip);
+                                if (!clip) return;
+                                setBusy(true);
+                                try {
+                                    await playPart3Clip(clip, 2);
+                                } catch (err) {
+                                    alert(err.message);
+                                } finally {
+                                    setBusy(false);
+                                    renderPart3Controls();
+                                }
+                            });
+                        });
+
+                        const continueBtn = area.querySelector("#part3Continue");
+                        if (continueBtn) {
+                            continueBtn.addEventListener("click", async () => {
+                                if (busy) return;
+                                await nextState();
+                            });
+                        }
+                    };
+
+                    renderPart3Controls();
+                    saveElpPatch({ [key]: lines });
+                    updateDevControls();
+                    return;
+                }
             }
-            saveElpPatch({ [key]: list });
+            saveElpPatch({ [key]: lines });
             break;
         }
 
@@ -1288,7 +2022,7 @@ async function runCurrentState(options = {}) {
                     renderMain(renderTranscriptPrompt(state, transcript, "Use the developer Record button to capture this answer.", "<p>No follow-up in Part 3 by design.</p>"));
                 }
             } else {
-                renderMain(`<h3>Describe What You Read</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
+                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer about what you understood.</p>`);
             }
             break;
         }
@@ -1445,6 +2179,15 @@ function cleanup() {
             runtime.story[key].audioSrc = null;
         }
     }
+    for (const setKey of PART3_SET_KEYS) {
+        const clips = runtime.part3[setKey]?.clips || [];
+        clips.forEach((clip) => {
+            if (clip?.audioSrc) {
+                URL.revokeObjectURL(clip.audioSrc);
+                clip.audioSrc = null;
+            }
+        });
+    }
     speechSynthesis.cancel();
 }
 
@@ -1536,6 +2279,20 @@ function setup() {
         runtime.transcripts.length = 0;
         runtime.story.sub1 = null;
         runtime.story.sub2 = null;
+        runtime.storyTokens.sub1 = 0;
+        runtime.storyTokens.sub2 = 0;
+        runtime.storyProgress.sub1 = null;
+        runtime.storyProgress.sub2 = null;
+        runtime.storyBuildJobs.sub1 = null;
+        runtime.storyBuildJobs.sub2 = null;
+        runtime.storyQueue = { token: runtime.sessionToken, promise: null };
+        runtime.part3.set1 = null;
+        runtime.part3.set2 = null;
+        runtime.part3.set3 = null;
+        runtime.part3BuildJobs.set1 = null;
+        runtime.part3BuildJobs.set2 = null;
+        runtime.part3BuildJobs.set3 = null;
+        runtime.part3SpeechPlays = {};
         runtime.pexelsAttribution = {};
         upsertDay(getTodayString(), () => ({ elp: null }));
         setState("IDLE");
