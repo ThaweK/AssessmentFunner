@@ -156,6 +156,7 @@ const REMOTE_IMAGE_FALLBACK = Object.freeze([
 const ELEVEN_SEGMENT_CONCURRENCY = 2;
 const ELEVEN_RETRY_LIMIT = 3;
 const ELEVEN_RETRY_BASE_DELAY_MS = 800;
+const IMAGE_USAGE_CACHE_KEY = "af_elp_image_usage_v1";
 
 const imageLoadCache = new Map();
 
@@ -844,7 +845,9 @@ async function buildWarmupQuestions() {
 function normalizeStoryRole(role) {
     const raw = String(role || "").trim().toUpperCase();
     if (!raw) return "NARRATOR";
-    if (raw === "AMBIENT") return null;
+    if (/^(AMBIENT|AMBIENCE|SFX|FX|BGM|MUSIC|SOUND|SOUNDS|SOUND_EFFECTS?|NOISES?)(?:[_\s-].*)?$/.test(raw)) {
+        return null;
+    }
 
     const aliases = {
         CPT: "CPT_M",
@@ -864,6 +867,44 @@ function normalizeStoryRole(role) {
     return VOICE_MAP[mapped] ? mapped : "NARRATOR";
 }
 
+function stripBalancedWrap(text) {
+    if (!text) return "";
+    const trimmed = text.trim();
+    if (!trimmed) return "";
+    if ((trimmed.startsWith("[") && trimmed.endsWith("]"))
+        || (trimmed.startsWith("(") && trimmed.endsWith(")"))
+        || (trimmed.startsWith("*") && trimmed.endsWith("*"))) {
+        return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+}
+
+function isLikelyNonSpokenNote(text) {
+    const lower = String(text || "").trim().toLowerCase();
+    if (!lower) return true;
+    if (/^(ambient|ambience|sfx|fx|bgm|music|sound effects?|sound cue|audio cue|background noise|background noises|noise|noises)\b/.test(lower)) {
+        return true;
+    }
+    if (/^(fade in|fade out|cut to|scene(?:\s*[:\-]|$)|voice ?over(?:\s*[:\-]|$)|narration(?:\s*[:\-]|$))/.test(lower)) {
+        return true;
+    }
+    return false;
+}
+
+function sanitizeStoryText(text) {
+    let cleaned = stripBalancedWrap(String(text || ""));
+    if (!cleaned) return "";
+
+    cleaned = cleaned.replace(
+        /^\s*(?:narrator|captain|first officer|air traffic control|atc|cabin crew|passenger|dispatcher|operations)\s*[:\-]\s*/i,
+        ""
+    ).trim();
+    if (!cleaned) return "";
+
+    if (isLikelyNonSpokenNote(cleaned)) return "";
+    return cleaned;
+}
+
 function sanitizeStorySegments(rawSegments = []) {
     if (!Array.isArray(rawSegments) || !rawSegments.length) {
         return [];
@@ -872,10 +913,12 @@ function sanitizeStorySegments(rawSegments = []) {
         .filter((segment) => segment && segment.text)
         .map((segment) => {
             const role = normalizeStoryRole(segment.role);
+            const text = sanitizeStoryText(segment.text);
             if (!role) return null;
+            if (!text) return null;
             return {
                 role,
-                text: String(segment.text).trim()
+                text
             };
         })
         .filter((segment) => segment && segment.text.length > 0);
@@ -1119,6 +1162,7 @@ SEGMENT RULES:
 - Do NOT use AMBIENT or sound-effect roles.
 - Do NOT put role prefixes inside the text - the role field handles that.
 - All segments are spoken dialogue or narration.
+- Do NOT include production notes such as "Ambient terminal noises", "[SFX]", "(music)", or scene directions.
 
 STORY STRUCTURE:
 Part 1 should cover pre-departure through stable cruise setup and end with unresolved risk/tension that naturally leads to Part 2.
@@ -1171,6 +1215,7 @@ SEGMENT RULES:
 - Do NOT use AMBIENT or sound-effect roles.
 - Do NOT put role prefixes inside the text - the role field handles that.
 - All segments are spoken dialogue or narration.
+- Do NOT include production notes such as "Ambient terminal noises", "[SFX]", "(music)", or scene directions.
 
 PART 2 REQUIREMENTS:
 - Center on non-standard or emergency evolution (technical, weather, cabin, medical, ATC complexity, or operational pressure), then coordinated handling and outcome.
@@ -1457,6 +1502,7 @@ Global rules:
 - Return exactly 3 clips.
 - Valid roles only: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
 - English only, realistic aviation operational phraseology.
+- Segments must be spoken words only (no stage directions like "Ambient terminal noises", "[SFX]", "(music)").
 - No explanations, no markdown, no extra keys.
 
 Set: ${setKey}
@@ -1573,6 +1619,46 @@ function trackPexelsId(id) {
     sessionStorage.setItem("af_pexels_used", JSON.stringify(used));
 }
 
+function getImageUsageMap() {
+    try {
+        const parsed = JSON.parse(sessionStorage.getItem(IMAGE_USAGE_CACHE_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function setImageUsageMap(map) {
+    try {
+        sessionStorage.setItem(IMAGE_USAGE_CACHE_KEY, JSON.stringify(map || {}));
+    } catch {
+        // no-op
+    }
+}
+
+function pickTrackedImage(pool, usageKey) {
+    const items = Array.isArray(pool) ? pool.filter(Boolean) : [];
+    if (!items.length) return null;
+
+    const usageMap = getImageUsageMap();
+    const used = Array.isArray(usageMap[usageKey]) ? usageMap[usageKey].filter((src) => items.includes(src)) : [];
+    const available = items.filter((src) => !used.includes(src));
+
+    let chosen;
+    if (available.length) {
+        chosen = randomPick(available);
+    } else {
+        const last = used[used.length - 1] || null;
+        const withoutLast = items.filter((src) => src !== last);
+        chosen = randomPick(withoutLast.length ? withoutLast : items);
+    }
+
+    const nextUsed = [...used.filter((src) => src !== chosen), chosen].slice(-Math.max(2, items.length));
+    usageMap[usageKey] = nextUsed;
+    setImageUsageMap(usageMap);
+    return chosen;
+}
+
 async function ensurePicture(type) {
     // Priority 1: Pexels API (if key available)
     const pexelsKey = getSettings().apiKeys.pexels;
@@ -1602,7 +1688,7 @@ async function ensurePicture(type) {
     const verified = await Promise.all(preferred.map(async (src) => ({ src, ok: await canLoadImage(src) })));
     const availableLocal = verified.filter((item) => item.ok).map((item) => item.src);
     if (availableLocal.length) {
-        return randomPick(availableLocal);
+        return pickTrackedImage(availableLocal, `local:${type}`) || randomPick(availableLocal);
     }
 
     // Priority 3: Remote fallback
@@ -1611,7 +1697,7 @@ async function ensurePicture(type) {
         type,
         attempted: preferred
     }, "warn");
-    return randomPick(REMOTE_IMAGE_FALLBACK);
+    return pickTrackedImage(REMOTE_IMAGE_FALLBACK, `remote:${type}`) || randomPick(REMOTE_IMAGE_FALLBACK);
 }
 
 function canLoadImage(src, timeoutMs = 3500) {
