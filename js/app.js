@@ -1,6 +1,6 @@
 import { ensureMigration, KEYS } from "./storage.js";
 import { ACCESS_PASSWORD, createLoadingOverlay, escapeHTML, formatDate, getTodayString, isDevMode } from "./utils.js";
-import { clearDebugLogs, subscribeDebugLogs } from "./debug.js";
+import { buildDebugLogBundle, clearDebugLogs, debugLog, formatDebugLogBundle, getAppRuntimeVersion, subscribeDebugLogs } from "./debug.js";
 import * as psychomotorTab from "./tabs/psychomotor.js";
 import * as technicalTab from "./tabs/technical.js";
 import * as elpTab from "./tabs/elp.js";
@@ -87,6 +87,7 @@ function renderDebugPanel() {
     panel.hidden = false;
     const scopedLogs = getOrderedScopedLogs();
     const selectedEntry = getSelectedDebugEntry(scopedLogs);
+    const appVersion = getAppRuntimeVersion();
     const detailContent = selectedEntry?.details
         ? JSON.stringify(selectedEntry.details, null, 2)
         : "No detail payload for this log entry.";
@@ -125,9 +126,11 @@ function renderDebugPanel() {
                         <option value="settings"${debugScope === "settings" ? " selected" : ""}>Settings</option>
                         <option value="api"${debugScope === "api" ? " selected" : ""}>API</option>
                     </select>
+                    <button id="debugExportBtn" class="btn btn-secondary">Export Logs (.log)</button>
                     <button id="debugClearBtn" class="btn btn-secondary">Clear Logs</button>
                 </div>
             </div>
+            <div class="hint">Runtime version: ${escapeHTML(appVersion)}</div>
             <div class="debug-layout">
                 <aside class="debug-toc">
                     <div class="debug-toc-summary">${scopedLogs.length} entr${scopedLogs.length === 1 ? "y" : "ies"}</div>
@@ -154,6 +157,26 @@ function renderDebugPanel() {
     `;
 
     panel.querySelector("#debugClearBtn")?.addEventListener("click", () => clearDebugLogs());
+    panel.querySelector("#debugExportBtn")?.addEventListener("click", () => {
+        const bundle = buildDebugLogBundle({
+            logsSnapshot: scopedLogs,
+            allLogsSnapshot: cachedLogs,
+            totalLogs: cachedLogs.length,
+            scope: debugScope,
+            activeTab: currentTab,
+            debugScope
+        });
+        const output = formatDebugLogBundle(bundle);
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const filename = `assessmentfunner-debug-${stamp}.log`;
+        const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+    });
     panel.querySelector("#debugScopeSelect")?.addEventListener("change", (event) => {
         debugScope = event.target.value;
         selectedDebugLogId = null;
@@ -239,6 +262,12 @@ function setupPasswordGate() {
 
 function boot() {
     document.getElementById("currentDate").textContent = formatDate(getTodayString());
+    debugLog("app.boot", "Application boot", {
+        tab: "app",
+        appVersion: getAppRuntimeVersion(),
+        url: window.location.href,
+        userAgent: navigator.userAgent
+    });
     subscribeDebugLogs((logs) => {
         cachedLogs = logs;
         renderDebugPanel();

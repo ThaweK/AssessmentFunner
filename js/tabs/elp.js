@@ -107,20 +107,20 @@ const VOICE_SETTINGS = {
 
 const ROLE_LABELS = Object.freeze({
     NARRATOR: "Narrator",
-    CPT_M: "Captain (male)",
-    CPT_F: "Captain (female)",
-    FO_M: "First Officer (male)",
-    FO_F: "First Officer (female)",
-    ATC_M: "Air Traffic Control (male)",
-    ATC_F: "Air Traffic Control (female)",
-    CC_M: "Cabin Crew (male)",
-    CC_F: "Cabin Crew (female)",
-    PAX_M: "Passenger (male)",
-    PAX_F: "Passenger (female)",
-    DISPATCH_M: "Dispatcher (male)",
-    DISPATCH_F: "Dispatcher (female)",
-    OPS_M: "Operations (male)",
-    OPS_F: "Operations (female)"
+    CPT_M: "Captain",
+    CPT_F: "Captain",
+    FO_M: "First Officer",
+    FO_F: "First Officer",
+    ATC_M: "Air Traffic Control",
+    ATC_F: "Air Traffic Control",
+    CC_M: "Cabin Crew",
+    CC_F: "Cabin Crew",
+    PAX_M: "Passenger",
+    PAX_F: "Passenger",
+    DISPATCH_M: "Dispatcher",
+    DISPATCH_F: "Dispatcher",
+    OPS_M: "Operations",
+    OPS_F: "Operations"
 });
 
 const ICAO_LEVELS = { 1: "Pre-elementary", 2: "Elementary", 3: "Pre-operational", 4: "Operational", 5: "Extended", 6: "Expert" };
@@ -157,6 +157,74 @@ const ELEVEN_SEGMENT_CONCURRENCY = 2;
 const ELEVEN_RETRY_LIMIT = 3;
 const ELEVEN_RETRY_BASE_DELAY_MS = 800;
 const IMAGE_USAGE_CACHE_KEY = "af_elp_image_usage_v1";
+const STORY_ROLE_CODE_RE = /\b(?:NARRATOR|CPT_[MF]|FO_[MF]|ATC_[MF]|CC_[MF]|PAX_[MF]|DISPATCH_[MF]|OPS_[MF])\b/gi;
+const STORY_ROLE_PREFIX_RE = /^\s*(?:(?:narrator|captain|first officer|air traffic control|atc|lead cabin crew|cabin crew|passenger|dispatcher|dispatch|operations|ops)(?:\s*\((?:male|female|[A-Z]{2,}(?:_[A-Z])?)\))*|NARRATOR|CPT_M|CPT_F|FO_M|FO_F|ATC_M|ATC_F|CC_M|CC_F|PAX_M|PAX_F|DISPATCH_M|DISPATCH_F|OPS_M|OPS_F)\s*[:\-]\s*/i;
+const STORY_INLINE_META_TAG_RE = /\((?:male|female|NARRATOR|CPT_M|CPT_F|FO_M|FO_F|ATC_M|ATC_F|CC_M|CC_F|PAX_M|PAX_F|DISPATCH_M|DISPATCH_F|OPS_M|OPS_F)\)/gi;
+const STORY_INLINE_LABEL_RE = /\b(?:narrator|captain|first officer|air traffic control|atc|lead cabin crew|cabin crew|passenger|dispatcher|dispatch|operations|ops)\s*(?:\((?:male|female|NARRATOR|CPT_M|CPT_F|FO_M|FO_F|ATC_M|ATC_F|CC_M|CC_F|PAX_M|PAX_F|DISPATCH_M|DISPATCH_F|OPS_M|OPS_F)\))?\s*[:\-]\s*/gi;
+const DEFAULT_GENDER_BY_ROLE_FAMILY = Object.freeze({
+    CPT: "M",
+    FO: "F",
+    ATC: "M",
+    CC: "F",
+    PAX: "M",
+    DISPATCH: "M",
+    OPS: "M"
+});
+const SPEAKER_ROLE_FAMILY_TO_KEY = Object.freeze({
+    NARRATOR: "narrator",
+    CPT: "captain",
+    FO: "first_officer",
+    ATC: "atc",
+    CC: "cabin_crew",
+    PAX: "passenger",
+    DISPATCH: "dispatch",
+    OPS: "operations"
+});
+const DIGIT_WORDS = Object.freeze({
+    "0": "zero",
+    "1": "one",
+    "2": "two",
+    "3": "three",
+    "4": "four",
+    "5": "five",
+    "6": "six",
+    "7": "seven",
+    "8": "eight",
+    "9": "nine"
+});
+const ICAO_ALPHABET_WORDS = Object.freeze({
+    A: "Alpha",
+    B: "Bravo",
+    C: "Charlie",
+    D: "Delta",
+    E: "Echo",
+    F: "Foxtrot",
+    G: "Golf",
+    H: "Hotel",
+    I: "India",
+    J: "Juliett",
+    K: "Kilo",
+    L: "Lima",
+    M: "Mike",
+    N: "November",
+    O: "Oscar",
+    P: "Papa",
+    Q: "Quebec",
+    R: "Romeo",
+    S: "Sierra",
+    T: "Tango",
+    U: "Uniform",
+    V: "Victor",
+    W: "Whiskey",
+    X: "X-ray",
+    Y: "Yankee",
+    Z: "Zulu"
+});
+const RUNWAY_SIDE_WORDS = Object.freeze({
+    L: "left",
+    R: "right",
+    C: "center"
+});
 
 const imageLoadCache = new Map();
 
@@ -342,6 +410,51 @@ function pickEnglishSpeechVoice() {
         || null;
 }
 
+function spellDigitsIndividually(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (!digits) return String(value || "");
+    return digits.split("").map((digit) => DIGIT_WORDS[digit] || digit).join(" ");
+}
+
+function spellTokenWithIcaoAlphabet(token) {
+    return String(token || "")
+        .split("")
+        .map((ch) => {
+            if (/[A-Z]/.test(ch)) return ICAO_ALPHABET_WORDS[ch] || ch;
+            if (/\d/.test(ch)) return DIGIT_WORDS[ch] || ch;
+            return ch;
+        })
+        .join(" ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
+
+function normalizeAviationTextForTts(rawText) {
+    let text = String(rawText || "").trim();
+    if (!text) return "";
+
+    text = text.replace(/\b(?:runway|rwy)\s+([0-9]{1,2})\s*([LRC])\b/gi, (_, digits, side) => {
+        const sideWord = RUNWAY_SIDE_WORDS[String(side || "").toUpperCase()] || String(side || "");
+        return `runway ${spellDigitsIndividually(digits)} ${sideWord}`.trim();
+    });
+
+    text = text.replace(/\bFL\s*([0-9]{2,3})\b/gi, (_, digits) => `flight level ${spellDigitsIndividually(digits)}`);
+    text = text.replace(/\bflight\s+level\s+([0-9]{2,3})\b/gi, (_, digits) => `flight level ${spellDigitsIndividually(digits)}`);
+    text = text.replace(/\b([0-9]+)\.([0-9]+)\b/g, (_, whole, frac) => `${spellDigitsIndividually(whole)} decimal ${spellDigitsIndividually(frac)}`);
+
+    // Mixed code tokens such as A320, B12, RW09.
+    text = text.replace(/\b([A-Z]{1,3}\d[A-Z0-9]*)\b/g, (_, token) => spellTokenWithIcaoAlphabet(token));
+    // Waypoints / callsigns such as AKE, GIVMI.
+    text = text.replace(/\b([A-Z]{2,6})\b/g, (_, token) => spellTokenWithIcaoAlphabet(token));
+    // Remaining standalone digits.
+    text = text.replace(/\b(\d+)\b/g, (_, digits) => spellDigitsIndividually(digits));
+
+    return text
+        .replace(/\s+([,.;:!?])/g, "$1")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
+
 function speakEnglishFallback(text, debugContext = {}) {
     if (!("speechSynthesis" in window)) {
         return;
@@ -349,7 +462,8 @@ function speakEnglishFallback(text, debugContext = {}) {
 
     speechSynthesis.cancel();
 
-    const utter = new SpeechSynthesisUtterance(text);
+    const normalizedText = normalizeAviationTextForTts(text);
+    const utter = new SpeechSynthesisUtterance(normalizedText || text);
     const voice = pickEnglishSpeechVoice();
     utter.lang = voice?.lang || "en-GB";
     utter.rate = 0.95;
@@ -361,6 +475,7 @@ function speakEnglishFallback(text, debugContext = {}) {
     debugLog("elp.fallbackSpeech", "Using browser speech fallback", {
         ...debugContext,
         lang: utter.lang,
+        text: utter.text,
         voiceName: voice?.name || null,
         voiceURI: voice?.voiceURI || null
     }, "warn");
@@ -412,6 +527,18 @@ function extractJSON(text) {
         if (candidate) return candidate;
     }
     return null;
+}
+
+function unwrapClaudeStructuredPayload(parsed, depth = 0) {
+    if (!parsed || typeof parsed !== "object" || depth > 2) return parsed;
+    if (Array.isArray(parsed.segments) || Array.isArray(parsed.clips)) return parsed;
+    if (typeof parsed.text === "string") {
+        const inner = extractJSON(parsed.text);
+        if (inner && inner !== parsed) {
+            return unwrapClaudeStructuredPayload(inner, depth + 1);
+        }
+    }
+    return parsed;
 }
 
 function normalizeTopicPinpoint(value) {
@@ -842,10 +969,105 @@ async function buildWarmupQuestions() {
     }
 }
 
-function normalizeStoryRole(role) {
-    const raw = String(role || "").trim().toUpperCase();
-    if (!raw) return "NARRATOR";
+function hasRoleToken(raw, token) {
+    return new RegExp(`(?:^|_)${token}(?:_|$)`).test(raw);
+}
+
+function normalizeRoleToken(value) {
+    return String(value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^\w]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+function detectRoleFamily(rawRole) {
+    if (!rawRole) return null;
+    if (hasRoleToken(rawRole, "NARRATOR")) return "NARRATOR";
+    if (hasRoleToken(rawRole, "CPT") || hasRoleToken(rawRole, "CAPTAIN")) return "CPT";
+    if (hasRoleToken(rawRole, "FO") || rawRole.includes("FIRST_OFFICER")) return "FO";
+    if (hasRoleToken(rawRole, "ATC") || rawRole.includes("AIR_TRAFFIC_CONTROL")) return "ATC";
+    if (hasRoleToken(rawRole, "PILOT")) return "CPT";
+    if (hasRoleToken(rawRole, "CC") || rawRole.includes("CABIN_CREW")) return "CC";
+    if (hasRoleToken(rawRole, "PAX") || hasRoleToken(rawRole, "PASSENGER")) return "PAX";
+    if (hasRoleToken(rawRole, "DISPATCH") || hasRoleToken(rawRole, "DISPATCHER")) return "DISPATCH";
+    if (rawRole.includes("GROUND_OPERATIONS") || rawRole.includes("GROUND_OPS")) return "OPS";
+    if (hasRoleToken(rawRole, "OPS") || hasRoleToken(rawRole, "OPERATIONS")) return "OPS";
+    return null;
+}
+
+function detectRoleGenderHint(value) {
+    const raw = String(value || "").toUpperCase();
+    if (!raw) return null;
+
+    if (/\bFEMALE\b|_F\b|\(\s*F\s*\)|(?:^|[\s(_-])F(?:[\s)_-]|$)/.test(raw)) return "F";
+    if (/\bMALE\b|_M\b|\(\s*M\s*\)|(?:^|[\s(_-])M(?:[\s)_-]|$)/.test(raw)) return "M";
+    return null;
+}
+
+function normalizeSpeakerRoleValue(value) {
+    const token = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    if (!token) return null;
+
+    if (["narrator", "narration", "voice_over"].includes(token)) return "NARRATOR";
+    if (["captain", "pilot", "commander", "pic", "pilot_in_command"].includes(token)) return "CPT";
+    if (["first_officer", "co_pilot", "copilot", "fo"].includes(token)) return "FO";
+    if (["atc", "air_traffic_control", "tower", "ground_controller", "controller"].includes(token)) return "ATC";
+    if (["cabin_crew", "flight_attendant", "lead_cabin_crew", "purser"].includes(token)) return "CC";
+    if (["passenger", "pax", "traveler"].includes(token)) return "PAX";
+    if (["dispatch", "dispatcher", "flight_dispatch"].includes(token)) return "DISPATCH";
+    if (["operations", "ops", "ground_operations", "ground_ops"].includes(token)) return "OPS";
+    return null;
+}
+
+function normalizeSpeakerGender(value) {
+    const token = String(value || "").trim().toLowerCase();
+    if (!token) return null;
+    if (["female", "f", "woman", "girl"].includes(token)) return "F";
+    if (["male", "m", "man", "boy"].includes(token)) return "M";
+    const guessed = detectRoleGenderHint(token);
+    return guessed || null;
+}
+
+function normalizeSpeakerMeta(rawSpeaker = {}) {
+    if (!rawSpeaker || typeof rawSpeaker !== "object" || Array.isArray(rawSpeaker)) return null;
+
+    const rawRole = String(
+        rawSpeaker.role
+        || rawSpeaker.roleType
+        || rawSpeaker.type
+        || rawSpeaker.job
+        || rawSpeaker.position
+        || ""
+    ).trim();
+    const rawGender = String(rawSpeaker.gender || rawSpeaker.sex || "").trim();
+    const name = String(rawSpeaker.name || rawSpeaker.callsign || "").trim();
+
+    const family = normalizeSpeakerRoleValue(rawRole);
+    const gender = normalizeSpeakerGender(rawGender);
+    const roleKey = SPEAKER_ROLE_FAMILY_TO_KEY[family] || null;
+
+    return {
+        role: roleKey,
+        gender: gender === "F" ? "female" : gender === "M" ? "male" : null,
+        name: name || null,
+        rawRole: rawRole || null
+    };
+}
+
+function normalizeStoryRole(role, textHint = "", speakerMeta = null) {
+    const raw = normalizeRoleToken(role);
+    const speakerRoleRaw = normalizeRoleToken(speakerMeta?.rawRole || speakerMeta?.role || "");
+    if (!raw && !speakerRoleRaw) return "NARRATOR";
+
     if (/^(AMBIENT|AMBIENCE|SFX|FX|BGM|MUSIC|SOUND|SOUNDS|SOUND_EFFECTS?|NOISES?)(?:[_\s-].*)?$/.test(raw)) {
+        return null;
+    }
+    if (/^(AMBIENT|AMBIENCE|SFX|FX|BGM|MUSIC|SOUND|SOUNDS|SOUND_EFFECTS?|NOISES?)(?:[_\s-].*)?$/.test(speakerRoleRaw)) {
         return null;
     }
 
@@ -858,13 +1080,45 @@ function normalizeStoryRole(role) {
         DISPATCH: "DISPATCH_M",
         OPS: "OPS_M",
         CAPTAIN: "CPT_M",
+        CAPTAIN_MALE: "CPT_M",
+        CAPTAIN_FEMALE: "CPT_F",
         FIRST_OFFICER: "FO_F",
+        FIRST_OFFICER_MALE: "FO_M",
+        FIRST_OFFICER_FEMALE: "FO_F",
+        AIR_TRAFFIC_CONTROL: "ATC_M",
+        AIR_TRAFFIC_CONTROL_MALE: "ATC_M",
+        AIR_TRAFFIC_CONTROL_FEMALE: "ATC_F",
+        LEAD_CABIN_CREW: "CC_F",
         CABIN_CREW: "CC_F",
-        PASSENGER: "PAX_M"
+        CABIN_CREW_MALE: "CC_M",
+        CABIN_CREW_FEMALE: "CC_F",
+        PASSENGER: "PAX_M",
+        PASSENGER_MALE: "PAX_M",
+        PASSENGER_FEMALE: "PAX_F",
+        DISPATCHER: "DISPATCH_M",
+        DISPATCHER_MALE: "DISPATCH_M",
+        DISPATCHER_FEMALE: "DISPATCH_F",
+        OPERATIONS: "OPS_M",
+        OPERATIONS_MALE: "OPS_M",
+        OPERATIONS_FEMALE: "OPS_F"
     };
 
     const mapped = aliases[raw] || raw;
-    return VOICE_MAP[mapped] ? mapped : "NARRATOR";
+    if (VOICE_MAP[mapped]) return mapped;
+    if (VOICE_MAP[raw]) return raw;
+    if (VOICE_MAP[speakerRoleRaw]) return speakerRoleRaw;
+
+    const speakerFamily = normalizeSpeakerRoleValue(speakerMeta?.rawRole || speakerMeta?.role || "");
+    const family = speakerFamily || detectRoleFamily(raw) || detectRoleFamily(speakerRoleRaw);
+    if (family === "NARRATOR") return "NARRATOR";
+    if (!family) return "NARRATOR";
+
+    const gender = normalizeSpeakerGender(speakerMeta?.gender || "")
+        || detectRoleGenderHint(`${raw} ${speakerRoleRaw} ${speakerMeta?.rawRole || ""} ${textHint || ""}`)
+        || DEFAULT_GENDER_BY_ROLE_FAMILY[family]
+        || "M";
+    const resolved = `${family}_${gender}`;
+    return VOICE_MAP[resolved] ? resolved : "NARRATOR";
 }
 
 function stripBalancedWrap(text) {
@@ -895,30 +1149,75 @@ function sanitizeStoryText(text) {
     let cleaned = stripBalancedWrap(String(text || ""));
     if (!cleaned) return "";
 
-    cleaned = cleaned.replace(
-        /^\s*(?:narrator|captain|first officer|air traffic control|atc|cabin crew|passenger|dispatcher|operations)\s*[:\-]\s*/i,
-        ""
-    ).trim();
+    // Some model outputs include chained prefixes, e.g. "Narrator: Captain (CPT_M): ...".
+    // Strip them repeatedly so only spoken content remains for TTS.
+    for (let i = 0; i < 4; i += 1) {
+        const withoutPrefix = cleaned.replace(STORY_ROLE_PREFIX_RE, "").trim();
+        if (withoutPrefix === cleaned) break;
+        cleaned = withoutPrefix;
+    }
+
+    cleaned = cleaned
+        .replace(STORY_INLINE_LABEL_RE, "")
+        .replace(STORY_INLINE_META_TAG_RE, "")
+        .replace(STORY_ROLE_CODE_RE, "")
+        .replace(/\s{2,}/g, " ")
+        .replace(/\s+([,.;:!?])/g, "$1")
+        .trim();
     if (!cleaned) return "";
 
     if (isLikelyNonSpokenNote(cleaned)) return "";
     return cleaned;
 }
 
+function countPatternMatches(text, pattern) {
+    const matches = String(text || "").match(pattern);
+    return matches ? matches.length : 0;
+}
+
+function isLikelySpeakerRoster(rawText, role = "") {
+    const text = String(rawText || "");
+    if (!text.trim()) return false;
+
+    const roleCodeCount = countPatternMatches(text, /\b(?:CPT_[MF]|FO_[MF]|ATC_[MF]|CC_[MF]|PAX_[MF]|DISPATCH_[MF]|OPS_[MF])\b/gi);
+    if (roleCodeCount >= 2) return true;
+
+    const labeledSpeakerCount = countPatternMatches(
+        text,
+        /\b(?:captain|first officer|air traffic control|atc|cabin crew|passenger|dispatch(?:er)?|operations|ops)\b\s*(?:\((?:[A-Z]{2,}_[MF]|male|female)\))?\s*:/gi
+    );
+    if (labeledSpeakerCount >= 3) return true;
+
+    if (normalizeRoleToken(role) === "NARRATOR" && labeledSpeakerCount >= 2 && /\.\s*\S+/.test(text)) {
+        return true;
+    }
+    return false;
+}
+
 function sanitizeStorySegments(rawSegments = []) {
     if (!Array.isArray(rawSegments) || !rawSegments.length) {
         return [];
     }
+    if (rawSegments.length === 1 && typeof rawSegments[0]?.text === "string") {
+        const embedded = unwrapClaudeStructuredPayload(extractJSON(rawSegments[0].text));
+        if (Array.isArray(embedded?.segments) && embedded.segments !== rawSegments) {
+            return sanitizeStorySegments(embedded.segments);
+        }
+    }
+
     return rawSegments
         .filter((segment) => segment && segment.text)
         .map((segment) => {
-            const role = normalizeStoryRole(segment.role);
+            if (isLikelySpeakerRoster(segment.text, segment.role)) return null;
+            const speaker = normalizeSpeakerMeta(segment.speaker);
+            const role = normalizeStoryRole(segment.role, segment.text, speaker);
             const text = sanitizeStoryText(segment.text);
             if (!role) return null;
             if (!text) return null;
             return {
                 role,
-                text
+                text,
+                speaker
             };
         })
         .filter((segment) => segment && segment.text.length > 0);
@@ -926,7 +1225,7 @@ function sanitizeStorySegments(rawSegments = []) {
 
 function segmentsToScript(segments) {
     return segments.map((segment) => {
-        const role = normalizeStoryRole(segment.role);
+        const role = normalizeStoryRole(segment.role, segment.text, segment.speaker);
         const label = ROLE_LABELS[role] || role;
         return `${label}: ${segment.text}`;
     }).join("\n");
@@ -1147,9 +1446,14 @@ Part 1 should take approximately 4-7 minutes when spoken aloud.
 OUTPUT FORMAT - return strict JSON only:
 {
   "segments": [
-    { "role": "NARRATOR", "text": "..." },
-    { "role": "CPT_M", "text": "..." },
-    { "role": "FO_F", "text": "..." },
+    {
+      "speaker": { "role": "captain", "gender": "male", "name": "Marcus Chen" },
+      "text": "..."
+    },
+    {
+      "speaker": { "role": "first_officer", "gender": "female", "name": "Sarah Mitchell" },
+      "text": "..."
+    },
     ...
   ],
   "pinpoints": ["checkpoint 1", "checkpoint 2", ...],
@@ -1157,10 +1461,13 @@ OUTPUT FORMAT - return strict JSON only:
 }
 
 SEGMENT RULES:
-- Each segment has exactly one "role" and one "text".
-- Valid roles: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- Each segment has exactly one "speaker" object and one "text".
+- speaker.role must be one of: narrator, captain, first_officer, atc, cabin_crew, passenger, dispatch, operations.
+- speaker.gender must be one of: male, female (for narrator use the most natural voice for that narrator persona).
+- Keep each speaker's role/gender/name consistent throughout the story.
+- One segment = one speaking turn. Do not list multiple speakers in a single segment.
 - Do NOT use AMBIENT or sound-effect roles.
-- Do NOT put role prefixes inside the text - the role field handles that.
+- Do NOT put role prefixes inside the text - the speaker object handles that metadata.
 - All segments are spoken dialogue or narration.
 - Do NOT include production notes such as "Ambient terminal noises", "[SFX]", "(music)", or scene directions.
 
@@ -1177,9 +1484,10 @@ REALISM:
 Include proper aviation terminology: callsigns, flight levels, squawk codes, STAR/SID names, runway designators, standard ATC phrases, checklists, CRM dialogue.
 
 SPEAKER CLARITY:
-- The first narrator line must introduce each speaking role in plain English, for example: "Cabin Crew (CC_F): Marta."
+- The first narrator line must introduce each speaking role in plain English, for example: "Cabin crew: Marta."
 - Before the first spoken line of each non-narrator role, add a short NARRATOR line that identifies that speaker by role and name.
 - Keep speaker names consistent throughout the story.
+- Never include meta labels like "(male)", "(female)", "(CPT_M)" or similar in spoken text.
 
 PINPOINTS:
 - "pinpoints": 8-15 short checkpoints capturing plot/safety moments a listener should recall from Part 1.
@@ -1200,9 +1508,14 @@ ${JSON.stringify(runtime.story.sub1?.pinpoints || runtime.pinpoints.sub1 || [])}
 OUTPUT FORMAT - return strict JSON only:
 {
   "segments": [
-    { "role": "NARRATOR", "text": "..." },
-    { "role": "CPT_M", "text": "..." },
-    { "role": "FO_F", "text": "..." },
+    {
+      "speaker": { "role": "captain", "gender": "male", "name": "Marcus Chen" },
+      "text": "..."
+    },
+    {
+      "speaker": { "role": "first_officer", "gender": "female", "name": "Sarah Mitchell" },
+      "text": "..."
+    },
     ...
   ],
   "pinpoints": ["checkpoint 1", "checkpoint 2", ...],
@@ -1210,10 +1523,13 @@ OUTPUT FORMAT - return strict JSON only:
 }
 
 SEGMENT RULES:
-- Each segment has exactly one "role" and one "text".
-- Valid roles: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- Each segment has exactly one "speaker" object and one "text".
+- speaker.role must be one of: narrator, captain, first_officer, atc, cabin_crew, passenger, dispatch, operations.
+- speaker.gender must be one of: male, female (for narrator use the most natural voice for that narrator persona).
+- Keep each speaker's role/gender/name consistent throughout the story.
+- One segment = one speaking turn. Do not list multiple speakers in a single segment.
 - Do NOT use AMBIENT or sound-effect roles.
-- Do NOT put role prefixes inside the text - the role field handles that.
+- Do NOT put role prefixes inside the text - the speaker object handles that metadata.
 - All segments are spoken dialogue or narration.
 - Do NOT include production notes such as "Ambient terminal noises", "[SFX]", "(music)", or scene directions.
 
@@ -1235,7 +1551,7 @@ PINPOINTS:
                 timeoutMs: 120000,
                 debugContext: { tab: "elp", operation: "buildPart2Story", label }
             });
-            const parsed = extractJSON(text);
+            const parsed = unwrapClaudeStructuredPayload(extractJSON(text));
             if (parsed) {
                 if (Array.isArray(parsed.segments) && parsed.segments.length) {
                     const cleaned = sanitizeStorySegments(parsed.segments);
@@ -1279,14 +1595,15 @@ PINPOINTS:
                 concurrency: ELEVEN_SEGMENT_CONCURRENCY
             });
             const blobs = await mapWithConcurrency(segments, ELEVEN_SEGMENT_CONCURRENCY, async (seg, i) => {
-                const role = normalizeStoryRole(seg.role);
+                const role = normalizeStoryRole(seg.role, seg.text, seg.speaker);
                 const ctx = { tab: "elp", operation: "buildPart2Story.tts", label, segment: i, role };
                 try {
                     const voiceId = VOICE_MAP[role] || VOICE_MAP.NARRATOR;
                     const voiceSettings = VOICE_SETTINGS[role] || undefined;
+                    const ttsText = normalizeAviationTextForTts(seg.text);
                     const blob = await runWithElevenRetry(() => generateSpeechWithElevenLabs({
                         apiKey: elevenKey,
-                        text: seg.text,
+                        text: ttsText || seg.text,
                         voiceId,
                         voiceSettings,
                         debugContext: ctx
@@ -1492,7 +1809,10 @@ Output JSON only:
     {
       "title": "short label",
       "segments": [
-        { "role": "ATC_M", "text": "..." }
+        {
+          "speaker": { "role": "atc", "gender": "male", "name": "Munich Tower" },
+          "text": "..."
+        }
       ]
     }
   ]
@@ -1500,7 +1820,10 @@ Output JSON only:
 
 Global rules:
 - Return exactly 3 clips.
-- Valid roles only: NARRATOR, CPT_M, CPT_F, FO_M, FO_F, ATC_M, ATC_F, CC_M, CC_F, PAX_M, PAX_F, DISPATCH_M, DISPATCH_F, OPS_M, OPS_F.
+- Each segment must include one "speaker" object and one "text".
+- speaker.role must be one of: narrator, captain, first_officer, atc, cabin_crew, passenger, dispatch, operations.
+- speaker.gender must be one of: male, female (for narrator use the most natural voice for that narrator persona).
+- One segment = one speaking turn. Do not list multiple speakers in a single segment.
 - English only, realistic aviation operational phraseology.
 - Segments must be spoken words only (no stage directions like "Ambient terminal noises", "[SFX]", "(music)").
 - No explanations, no markdown, no extra keys.
@@ -1517,7 +1840,7 @@ ${part3SpecForSet(setKey)}`;
                 timeoutMs: 90000,
                 debugContext: { tab: "elp", operation: "buildPart3Set", setKey }
             });
-            const parsed = extractJSON(text);
+            const parsed = unwrapClaudeStructuredPayload(extractJSON(text));
             const parsedClips = normalizePart3Clips(parsed?.clips, setKey);
             if (parsedClips.length === 3) {
                 clips = parsedClips;
@@ -1535,12 +1858,13 @@ ${part3SpecForSet(setKey)}`;
         try {
             const withAudio = await Promise.all(clips.map(async (clip) => {
                 const segmentBlobs = await mapWithConcurrency(clip.segments, 2, async (segment, segmentIndex) => {
-                    const role = normalizeStoryRole(segment.role);
+                    const role = normalizeStoryRole(segment.role, segment.text, segment.speaker);
                     const voiceId = VOICE_MAP[role] || VOICE_MAP.NARRATOR;
                     const voiceSettings = VOICE_SETTINGS[role] || undefined;
+                    const ttsText = normalizeAviationTextForTts(segment.text);
                     return runWithElevenRetry(() => generateSpeechWithElevenLabs({
                         apiKey: elevenKey,
-                        text: segment.text,
+                        text: ttsText || segment.text,
                         voiceId,
                         voiceSettings,
                         debugContext: { tab: "elp", operation: "buildPart3Set.tts", setKey, clipId: clip.id, segmentIndex, role }
