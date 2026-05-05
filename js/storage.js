@@ -111,6 +111,27 @@ export function saveSettings(settings) {
     write(KEYS.settings, settings);
 }
 
+export function applyLocalApiKeys(apiKeys = {}) {
+    const settings = getSettings();
+    const providers = ["anthropic", "openai", "elevenlabs", "pexels"];
+    let changed = false;
+
+    for (const provider of providers) {
+        const value = typeof apiKeys[provider] === "string" ? apiKeys[provider].trim() : "";
+        if (!value || settings.apiKeys[provider] === value) {
+            continue;
+        }
+        settings.apiKeys[provider] = value;
+        changed = true;
+    }
+
+    if (changed) {
+        write(KEYS.settings, settings);
+    }
+
+    return changed;
+}
+
 export function getHistory() {
     return read(KEYS.history, {});
 }

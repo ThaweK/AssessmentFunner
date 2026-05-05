@@ -1,4 +1,4 @@
-import { ensureMigration, KEYS } from "./storage.js";
+import { applyLocalApiKeys, ensureMigration, KEYS } from "./storage.js";
 import { ACCESS_PASSWORD, createLoadingOverlay, escapeHTML, formatDate, getTodayString, isDevMode } from "./utils.js";
 import { buildDebugLogBundle, clearDebugLogs, debugLog, formatDebugLogBundle, getAppRuntimeVersion, subscribeDebugLogs } from "./debug.js";
 import * as psychomotorTab from "./tabs/psychomotor.js";
@@ -279,7 +279,32 @@ function boot() {
     activateTab("psychomotor");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+async function preloadLocalApiKeys() {
+    try {
+        const response = await fetch("./local-secrets.json", { cache: "no-store" });
+        if (!response.ok) {
+            return;
+        }
+
+        const payload = await response.json();
+        if (!payload || typeof payload !== "object") {
+            return;
+        }
+
+        const changed = applyLocalApiKeys(payload);
+        if (changed) {
+            debugLog("app.preloadLocalApiKeys", "Loaded local API keys from local-secrets.json", {
+                tab: "app",
+                providers: Object.keys(payload).filter((key) => Boolean(payload[key]))
+            });
+        }
+    } catch {
+        // Local secrets file is optional for local-only launches.
+    }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
     ensureMigration();
+    await preloadLocalApiKeys();
     setupPasswordGate();
 });

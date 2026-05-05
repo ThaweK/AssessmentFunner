@@ -1,83 +1,128 @@
 @echo off
-REM AssessmentFunner — Windows launcher
-REM Double-click this file to start the app
+setlocal EnableExtensions EnableDelayedExpansion
+
+REM AssessmentFunner - Windows launcher
+REM Starts the app on localhost so microphone recording works in modern browsers.
 
 cd /d "%~dp0"
-set PORT=8000
 
-REM Check if Python is available
-where python3 >nul 2>&1 && (set "PY=python3" & goto :found)
-where python >nul 2>&1 && (set "PY=python" & goto :found)
+set "HOST=localhost"
+set "PORT=8000"
+set "SERVER_MODE="
+set "PY_CMD="
 
-REM Python not found — try to install it
-echo Python not found. Attempting to install...
-echo.
+call :find_free_port
+call :detect_python
 
-REM Try winget (Windows 10 1709+ / Windows 11)
-where winget >nul 2>&1
-if %errorlevel%==0 (
-    echo Installing Python via winget...
-    winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
-    if %errorlevel%==0 (
-        echo.
-        echo Python installed. Restarting launcher...
-        echo.
-        REM Refresh PATH for this session
-        set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
-        set "PY=python"
-        goto :found
-    )
+if defined PY_CMD (
+    set "SERVER_MODE=python"
+) else (
+    set "SERVER_MODE=powershell"
 )
 
-REM Winget failed or unavailable — fall back to PowerShell HTTP server
-echo.
-echo Could not install Python automatically.
-echo Falling back to PowerShell HTTP server...
-echo.
-echo Starting AssessmentFunner on http://localhost:%PORT%
+echo Starting AssessmentFunner on http://%HOST%:%PORT%
 echo Press Ctrl+C to stop the server.
 echo.
 
-start "" "http://localhost:%PORT%"
+start "" "http://%HOST%:%PORT%/"
+
+if /i "%SERVER_MODE%"=="python" (
+    call %PY_CMD% -m http.server %PORT%
+    goto :eof
+)
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$listener = [System.Net.HttpListener]::new();" ^
-    "$listener.Prefixes.Add('http://localhost:%PORT%/');" ^
-    "$listener.Start();" ^
-    "Write-Host 'Server running on http://localhost:%PORT%';" ^
+    "$ErrorActionPreference = 'Stop';" ^
+    "$port = %PORT%;" ^
     "$root = (Get-Location).Path;" ^
+    "$listener = [System.Net.HttpListener]::new();" ^
+    "$listener.Prefixes.Add(('http://localhost:{0}/' -f $port));" ^
+    "$listener.Start();" ^
     "$mimeTypes = @{" ^
-    "  '.html'='text/html'; '.css'='text/css'; '.js'='application/javascript';" ^
-    "  '.json'='application/json'; '.png'='image/png'; '.jpg'='image/jpeg';" ^
-    "  '.jpeg'='image/jpeg'; '.gif'='image/gif'; '.svg'='image/svg+xml';" ^
-    "  '.ico'='image/x-icon'; '.woff'='font/woff'; '.woff2'='font/woff2';" ^
+    "  '.html'='text/html; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.js'='application/javascript; charset=utf-8';" ^
+    "  '.json'='application/json; charset=utf-8'; '.txt'='text/plain; charset=utf-8'; '.png'='image/png'; '.jpg'='image/jpeg';" ^
+    "  '.jpeg'='image/jpeg'; '.gif'='image/gif'; '.svg'='image/svg+xml'; '.ico'='image/x-icon'; '.webp'='image/webp';" ^
+    "  '.mp3'='audio/mpeg'; '.wav'='audio/wav'; '.ogg'='audio/ogg'; '.webm'='audio/webm'; '.m4a'='audio/mp4';" ^
+    "  '.woff'='font/woff'; '.woff2'='font/woff2'; '.ttf'='font/ttf'; '.otf'='font/otf';" ^
     "};" ^
-    "while ($listener.IsListening) {" ^
-    "  $ctx = $listener.GetContext();" ^
-    "  $path = $ctx.Request.Url.LocalPath;" ^
-    "  if ($path -eq '/') { $path = '/index.html' }" ^
-    "  $file = Join-Path $root ($path -replace '/','\');" ^
-    "  if (Test-Path $file -PathType Leaf) {" ^
-    "    $ext = [System.IO.Path]::GetExtension($file);" ^
-    "    $ct = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { 'application/octet-stream' };" ^
-    "    $bytes = [System.IO.File]::ReadAllBytes($file);" ^
-    "    $ctx.Response.ContentType = $ct;" ^
-    "    $ctx.Response.ContentLength64 = $bytes.Length;" ^
-    "    $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length);" ^
-    "  } else {" ^
-    "    $ctx.Response.StatusCode = 404;" ^
-    "    $bytes = [System.Text.Encoding]::UTF8.GetBytes('Not Found');" ^
-    "    $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length);" ^
+    "Write-Host ('Server running on http://localhost:{0}' -f $port);" ^
+    "try {" ^
+    "  while ($listener.IsListening) {" ^
+    "    $ctx = $listener.GetContext();" ^
+    "    try {" ^
+    "      $requestPath = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath);" ^
+    "      if ([string]::IsNullOrWhiteSpace($requestPath) -or $requestPath -eq '/') { $requestPath = '/index.html' }" ^
+    "      $relativePath = $requestPath.TrimStart('/').Replace('/', '\');" ^
+    "      $fullPath = Join-Path $root $relativePath;" ^
+    "      $fullPath = [System.IO.Path]::GetFullPath($fullPath);" ^
+    "      if (-not $fullPath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {" ^
+    "        $ctx.Response.StatusCode = 403;" ^
+    "        $bytes = [System.Text.Encoding]::UTF8.GetBytes('Forbidden');" ^
+    "      } elseif (Test-Path $fullPath -PathType Leaf) {" ^
+    "        $ext = [System.IO.Path]::GetExtension($fullPath).ToLowerInvariant();" ^
+    "        $ctx.Response.ContentType = if ($mimeTypes.ContainsKey($ext)) { $mimeTypes[$ext] } else { 'application/octet-stream' };" ^
+    "        $bytes = [System.IO.File]::ReadAllBytes($fullPath);" ^
+    "        $ctx.Response.StatusCode = 200;" ^
+    "      } else {" ^
+    "        $ctx.Response.StatusCode = 404;" ^
+    "        $bytes = [System.Text.Encoding]::UTF8.GetBytes('Not Found');" ^
+    "      }" ^
+    "      $ctx.Response.ContentLength64 = $bytes.Length;" ^
+    "      $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length);" ^
+    "    } catch {" ^
+    "      $ctx.Response.StatusCode = 500;" ^
+    "      $bytes = [System.Text.Encoding]::UTF8.GetBytes('Internal Server Error');" ^
+    "      $ctx.Response.ContentLength64 = $bytes.Length;" ^
+    "      $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length);" ^
+    "    } finally {" ^
+    "      $ctx.Response.OutputStream.Close();" ^
+    "      $ctx.Response.Close();" ^
+    "    }" ^
     "  }" ^
-    "  $ctx.Response.Close();" ^
+    "} finally {" ^
+    "  $listener.Stop();" ^
+    "  $listener.Close();" ^
     "}"
 
 goto :eof
 
-:found
-echo Starting AssessmentFunner on http://localhost:%PORT%
-echo Press Ctrl+C to stop the server.
-echo.
+:detect_python
+where py >nul 2>&1
+if not errorlevel 1 (
+    py -3 -c "import sys" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY_CMD=py -3"
+        goto :eof
+    )
+)
 
-start "" "http://localhost:%PORT%"
-%PY% -m http.server %PORT%
+where python >nul 2>&1
+if not errorlevel 1 (
+    python -c "import sys" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY_CMD=python"
+        goto :eof
+    )
+)
+
+where python3 >nul 2>&1
+if not errorlevel 1 (
+    python3 -c "import sys" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY_CMD=python3"
+        goto :eof
+    )
+)
+
+goto :eof
+
+:find_free_port
+set /a PORT=%PORT%-1
+
+:next_port
+set /a PORT+=1
+powershell -NoProfile -Command ^
+    "$tcp = New-Object System.Net.Sockets.TcpClient;" ^
+    "try { $tcp.Connect('%HOST%', %PORT%); exit 0 } catch { exit 1 } finally { $tcp.Dispose() }" >nul 2>&1
+if not errorlevel 1 goto :next_port
+goto :eof

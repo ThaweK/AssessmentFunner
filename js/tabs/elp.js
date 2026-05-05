@@ -147,6 +147,27 @@ const DEFAULT_LOCAL_IMAGE_LIBRARY = Object.freeze({
     ]
 });
 
+const PART4_COMPARE_PAIRS = Object.freeze([
+    {
+        id: "cockpit-wing",
+        images: ["assets/img/aviation-cockpit-1.jpg", "assets/img/aviation-wing-1.jpg"],
+        theme: "in-flight cockpit workload and outside weather/route awareness",
+        pexelsQueries: ["airplane cockpit pilot", "airplane wing in flight"]
+    },
+    {
+        id: "apron-cockpit",
+        images: ["assets/img/aviation-apron-1.jpg", "assets/img/aviation-cockpit-1.jpg"],
+        theme: "ground operation coordination versus cockpit task management",
+        pexelsQueries: ["airport apron aircraft ground crew", "airplane cockpit pilot"]
+    },
+    {
+        id: "apron-wing",
+        images: ["assets/img/aviation-apron-1.jpg", "assets/img/aviation-wing-1.jpg"],
+        theme: "surface operations compared with en-route decision-making",
+        pexelsQueries: ["airport apron aircraft stand", "airplane wing in flight"]
+    }
+]);
+
 const REMOTE_IMAGE_FALLBACK = Object.freeze([
     "https://images.pexels.com/photos/62623/wing-plane-flying-airplane-62623.jpeg",
     "https://images.pexels.com/photos/358319/pexels-photo-358319.jpeg",
@@ -323,6 +344,124 @@ const RECORD_STATE_TO_LABEL = Object.freeze({
     PART3_SET3_DESCRIBE: "part3_set3_describe"
 });
 
+const PART2_SCENARIO_LIBRARY = Object.freeze([
+    {
+        id: "hydraulic_leak",
+        title: "Hydraulic system leak after departure",
+        part1Brief: "Build tension around abnormal indications, checklist work, dispatch coordination, and performance planning without making weather the main problem.",
+        part2Brief: "Continue with system degradation, QRH actions, landing configuration concerns, and crew decision-making."
+    },
+    {
+        id: "medical_emergency",
+        title: "Passenger medical emergency on climb-out",
+        part1Brief: "Focus on cabin reports, crew information gathering, operational priorities, and diversion planning without using storms or turbulence as the main event.",
+        part2Brief: "Continue with medical deterioration, coordination with cabin crew and ATC, and time-critical diversion handling."
+    },
+    {
+        id: "smoke_odor",
+        title: "Smoke or electrical odor in the cabin",
+        part1Brief: "Create a realistic build-up through cabin observations, troubleshooting, checklist use, and communication discipline.",
+        part2Brief: "Continue with isolation steps, possible escalation, priority handling, and approach or landing decisions."
+    },
+    {
+        id: "pressurization_issue",
+        title: "Pressurization control anomaly",
+        part1Brief: "Develop the story through subtle indications, crew cross-checks, and increasing workload during climb or cruise.",
+        part2Brief: "Continue with cabin altitude concerns, descent planning, coordination, and safe outcome management."
+    },
+    {
+        id: "fuel_imbalance",
+        title: "Fuel imbalance and transfer problem",
+        part1Brief: "Focus on detection, monitoring, checklist logic, and route implications rather than weather threats.",
+        part2Brief: "Continue with system management, diversion or priority handling considerations, and final resolution."
+    },
+    {
+        id: "bird_strike",
+        title: "Bird strike and engine abnormality",
+        part1Brief: "Cover departure, impact recognition, cockpit coordination, and first actions with realistic radio work.",
+        part2Brief: "Continue with engine assessment, return or diversion decision, cabin management, and landing planning."
+    },
+    {
+        id: "door_indication",
+        title: "Door or cargo indication abnormality",
+        part1Brief: "Build the story around uncertainty, company coordination, and operational implications during taxi or climb.",
+        part2Brief: "Continue with diagnosis, precautionary handling, crew coordination, and safe recovery."
+    },
+    {
+        id: "brake_overheat",
+        title: "Brake overheat after rejected takeoff or landing",
+        part1Brief: "Center the narrative on runway decision-making, checklists, emergency services, and cockpit-cabin coordination.",
+        part2Brief: "Continue with ground response, possible evacuation debate, and operational follow-through."
+    },
+    {
+        id: "unruly_passenger",
+        title: "Disruptive passenger creating operational risk",
+        part1Brief: "Build realistic tension through cabin reports, CRM, and decision-making while keeping the flight operations context strong.",
+        part2Brief: "Continue with escalation, crew resource management, ATC coordination, and diversion or security handling."
+    },
+    {
+        id: "navigation_failure",
+        title: "Navigation or avionics malfunction",
+        part1Brief: "Develop the scenario through equipment anomalies, cross-checks, and workload management, not weather.",
+        part2Brief: "Continue with degraded navigation, routing implications, ATC coordination, and approach planning."
+    }
+]);
+
+const PART3_THEME_LIBRARY = Object.freeze({
+    set1: [
+        "pushback delay due to headset communication fault",
+        "runway crossing clearance readback",
+        "last-minute stand change from apron control",
+        "fuel uplift confirmation discrepancy",
+        "cabin ready call before departure",
+        "de-icing slot timing coordination",
+        "late baggage loading and final loadsheet check",
+        "tug disconnect and taxi clearance sequence",
+        "frequency change during departure",
+        "ground crew report of exterior panel concern"
+    ],
+    set2: [
+        "return to stand after a technical message",
+        "medical assistance request after boarding",
+        "holding delay with fuel monitoring",
+        "destination runway change during descent",
+        "equipment cooling fan caution in cruise",
+        "passenger connection pressure affecting turnaround",
+        "minor cabin smoke report requiring assessment",
+        "ATC reroute affecting fuel and arrival planning",
+        "autopilot disconnect with manual handling",
+        "single hydraulic pump issue with normal continuation debate"
+    ],
+    set3: [
+        "captain and first officer debating a diversion threshold",
+        "cabin crew and captain coordinating a disruptive passenger response",
+        "dispatch and flight crew discussing MEL implications",
+        "tower and crew resolving conflicting traffic sequencing priorities",
+        "captain and first officer managing a checklist under time pressure",
+        "crew and cabin discussing a medical case severity update",
+        "flight crew coordinating with company operations on turnaround risk",
+        "crew discussing fuel strategy after a reroute",
+        "crew debating whether indications justify a precautionary landing",
+        "two pilots comparing options after an avionics degradation"
+    ]
+});
+
+const RECORD_STATE_SKIP_PATCH = Object.freeze({
+    PART2_SUB1_DESCRIBE: { part2Sub1RecordingSkipped: true, part2Sub2RecordingSkipped: false },
+    PART2_SUB2_DESCRIBE: { part2Sub1RecordingSkipped: false, part2Sub2RecordingSkipped: true },
+    PART3_SET1_DESCRIBE: { part3Set1RecordingSkipped: true },
+    PART3_SET2_DESCRIBE: { part3Set2RecordingSkipped: true },
+    PART3_SET3_DESCRIBE: { part3Set3RecordingSkipped: true }
+});
+
+const RECORD_STATE_CLEAR_SKIP_PATCH = Object.freeze({
+    PART2_SUB1_DESCRIBE: { part2Sub1RecordingSkipped: false },
+    PART2_SUB2_DESCRIBE: { part2Sub2RecordingSkipped: false },
+    PART3_SET1_DESCRIBE: { part3Set1RecordingSkipped: false },
+    PART3_SET2_DESCRIBE: { part3Set2RecordingSkipped: false },
+    PART3_SET3_DESCRIBE: { part3Set3RecordingSkipped: false }
+});
+
 /* ── Helpers ── */
 
 function getTodayElp() {
@@ -488,13 +627,70 @@ function makeFallbackScore(rationale = "Fallback score used.") {
 }
 
 function buildTranscriptPatch(stateName, transcript) {
-    const patch = { lastTranscript: { state: stateName, transcript } };
+    const patch = {
+        lastTranscript: { state: stateName, transcript },
+        ...(RECORD_STATE_CLEAR_SKIP_PATCH[stateName] || {})
+    };
     if (stateName === "PART2_SUB1_DESCRIBE") patch.part2Sub1Transcript = transcript;
     if (stateName === "PART2_SUB2_DESCRIBE") patch.part2Sub2Transcript = transcript;
     if (stateName === "PART3_SET1_DESCRIBE") patch.part3Set1Transcript = transcript;
     if (stateName === "PART3_SET2_DESCRIBE") patch.part3Set2Transcript = transcript;
     if (stateName === "PART3_SET3_DESCRIBE") patch.part3Set3Transcript = transcript;
     return patch;
+}
+
+function buildSkippedRecordingPatch(stateName) {
+    const transcriptPatch = buildTranscriptPatch(stateName, "");
+    return {
+        ...transcriptPatch,
+        ...(RECORD_STATE_SKIP_PATCH[stateName] || {})
+    };
+}
+
+function wasRecordingSkippedForState(stateName) {
+    const day = getTodayElp() || {};
+    if (stateName === "PART2_SUB1_DESCRIBE") return day.part2Sub1RecordingSkipped === true;
+    if (stateName === "PART2_SUB2_DESCRIBE") return day.part2Sub2RecordingSkipped === true;
+    if (stateName === "PART3_SET1_DESCRIBE") return day.part3Set1RecordingSkipped === true;
+    if (stateName === "PART3_SET2_DESCRIBE") return day.part3Set2RecordingSkipped === true;
+    if (stateName === "PART3_SET3_DESCRIBE") return day.part3Set3RecordingSkipped === true;
+    return false;
+}
+
+function formatPinpointAsQuestion(pinpoint, prefix) {
+    const cleaned = String(pinpoint || "").trim().replace(/[.?!]+$/g, "");
+    if (!cleaned) return "";
+    return `${prefix} ${cleaned.toLowerCase()}?`;
+}
+
+function buildGenericPart2Followups(label) {
+    const savedTopicPinpoints = Array.isArray(getTodayElp()?.part2TopicPinpoints?.[label])
+        ? getTodayElp().part2TopicPinpoints[label]
+        : [];
+    const story = runtime.story[label];
+    const pinpoints = Array.isArray(story?.pinpoints) && story.pinpoints.length
+        ? story.pinpoints
+        : savedTopicPinpoints.length
+            ? savedTopicPinpoints
+        : Array.isArray(runtime.pinpoints[label]) && runtime.pinpoints[label].length
+            ? runtime.pinpoints[label]
+            : [];
+
+    const questions = [];
+    if (pinpoints[0]) questions.push(formatPinpointAsQuestion(pinpoints[0], "Can you summarize"));
+    if (pinpoints[1]) questions.push(formatPinpointAsQuestion(pinpoints[1], "What can you say about"));
+    if (pinpoints[2]) questions.push(formatPinpointAsQuestion(pinpoints[2], "Explain"));
+    if (pinpoints[3]) questions.push(formatPinpointAsQuestion(pinpoints[3], "How would you describe"));
+
+    if (label === "sub1") {
+        questions.push("What were the main operational risks in the story, and how did the crew respond?");
+        questions.push("Which communication in the story was most important for situational awareness?");
+    } else {
+        questions.push("What was the key non-standard event, and what decision path did the crew take?");
+        questions.push("How did crew coordination and communication support the outcome?");
+    }
+
+    return uniqueTopicPinpoints(questions.filter(Boolean), 5);
 }
 
 function parseJSON(raw) {
@@ -614,6 +810,161 @@ function savePart2TopicPinpointsForLabel(label, topicPinpoints) {
             updatedAt: new Date().toISOString()
         }
     });
+}
+
+function collectRecentValues(readValue, limit = 12) {
+    const history = getHistory();
+    const dates = Object.keys(history).sort().reverse();
+    const values = [];
+    for (const date of dates) {
+        const value = readValue(history[date]?.elp || null);
+        if (!value) continue;
+        values.push(value);
+        if (values.length >= limit) break;
+    }
+    return values;
+}
+
+function collectPreviousPart2ScenarioIds(limit = 12) {
+    return collectRecentValues((elp) => elp?.part2Scenario?.id || "", limit);
+}
+
+function pickPart2Scenario() {
+    const recentIds = new Set(collectPreviousPart2ScenarioIds(6));
+    const unused = PART2_SCENARIO_LIBRARY.filter((scenario) => !recentIds.has(scenario.id));
+    return randomPick(unused.length ? unused : PART2_SCENARIO_LIBRARY);
+}
+
+function getCurrentPart2Scenario() {
+    const saved = getTodayElp()?.part2Scenario;
+    if (saved?.id) {
+        const matched = PART2_SCENARIO_LIBRARY.find((scenario) => scenario.id === saved.id);
+        return matched || saved;
+    }
+    const scenario = pickPart2Scenario();
+    saveElpPatch({ part2Scenario: scenario });
+    return scenario;
+}
+
+function collectPreviousPart3Themes(setKey, limit = 18) {
+    const values = collectRecentValues((elp) => {
+        const themes = elp?.part3Themes?.[setKey];
+        return Array.isArray(themes) ? themes : null;
+    }, limit);
+    return uniqueTopicPinpoints(values.flat(), limit);
+}
+
+function collectPreviousPart4PairIds(limit = 12) {
+    return collectRecentValues((elp) => elp?.part4ComparePair?.id || "", limit);
+}
+
+function pickPart4ComparePair() {
+    const recentIds = new Set(collectPreviousPart4PairIds(4));
+    const preferred = PART4_COMPARE_PAIRS.filter((pair) => !recentIds.has(pair.id));
+    return randomPick(preferred.length ? preferred : PART4_COMPARE_PAIRS);
+}
+
+function getCurrentPart4ComparePair() {
+    const saved = getTodayElp()?.part4ComparePair;
+    if (saved?.id && Array.isArray(saved.images) && saved.images.length === 2) {
+        return saved;
+    }
+    const pair = pickPart4ComparePair();
+    saveElpPatch({ part4ComparePair: pair });
+    return pair;
+}
+
+async function searchPexelsForPairTheme(pair) {
+    const pexelsKey = getSettings().apiKeys.pexels;
+    const queries = Array.isArray(pair?.pexelsQueries) ? pair.pexelsQueries.filter(Boolean) : [];
+    if (!pexelsKey || queries.length < 2) {
+        return null;
+    }
+
+    const usedIds = getUsedPexelsIds();
+    const selected = [];
+    const selectedIds = new Set();
+
+    for (const query of queries.slice(0, 2)) {
+        try {
+            const result = await searchPexels({
+                apiKey: pexelsKey,
+                query,
+                exclude: [...usedIds, ...selectedIds],
+                perPage: 20,
+                debugContext: { tab: "elp", operation: "part4.comparePair", pairId: pair.id, query }
+            });
+            if (!result?.url || selectedIds.has(result.pexelsId)) {
+                return null;
+            }
+            selected.push(result);
+            selectedIds.add(result.pexelsId);
+        } catch (err) {
+            debugLog("elp.part4ComparePair", "Pexels pair query failed", {
+                tab: "elp",
+                pairId: pair?.id || null,
+                query,
+                error: err?.message || String(err)
+            }, "warn");
+            return null;
+        }
+    }
+
+    if (selected.length !== 2) {
+        return null;
+    }
+
+    if (!runtime.pexelsAttribution) runtime.pexelsAttribution = {};
+    for (const item of selected) {
+        trackPexelsId(item.pexelsId);
+        runtime.pexelsAttribution[item.url] = item;
+    }
+
+    return {
+        ...pair,
+        images: selected.map((item) => item.url),
+        source: "pexels"
+    };
+}
+
+async function ensurePart4ComparePair() {
+    const saved = getTodayElp()?.part4ComparePair;
+    if (saved?.id && Array.isArray(saved.images) && saved.images.length === 2) {
+        return saved;
+    }
+
+    const pair = getCurrentPart4ComparePair();
+    const remotePair = await searchPexelsForPairTheme(pair);
+    if (remotePair) {
+        saveElpPatch({ part4ComparePair: remotePair });
+        return remotePair;
+    }
+
+    return pair;
+}
+
+function pickPart3Themes(setKey, count = 3) {
+    const pool = Array.isArray(PART3_THEME_LIBRARY[setKey]) ? PART3_THEME_LIBRARY[setKey] : [];
+    const recent = new Set(collectPreviousPart3Themes(setKey, 9).map((value) => normalizeTopicPinpoint(value)));
+    const preferred = pool.filter((theme) => !recent.has(normalizeTopicPinpoint(theme)));
+    const basePool = preferred.length >= count ? preferred : pool;
+    return randomize(basePool).slice(0, count);
+}
+
+function getCurrentPart3Themes(setKey) {
+    const saved = getTodayElp()?.part3Themes?.[setKey];
+    if (Array.isArray(saved) && saved.length) {
+        return saved;
+    }
+    const themes = pickPart3Themes(setKey, 3);
+    const current = getTodayElp()?.part3Themes || {};
+    saveElpPatch({
+        part3Themes: {
+            ...current,
+            [setKey]: themes
+        }
+    });
+    return themes;
 }
 
 function getOfflineWarning() {
@@ -834,6 +1185,7 @@ function renderActionArea() {
         area.innerHTML = `
             <div class="recording-controls">
                 <button id="prodRecord" class="btn btn-primary btn-lg"><span class="rec-dot"></span> Start Recording</button>
+                <button id="prodSkipRecord" class="btn btn-secondary btn-lg">Skip Recording</button>
                 <div id="prodRecActive" hidden>
                     <div class="rec-timer"><span class="rec-dot"></span> Recording: <span id="prodElapsed">0</span>s <span class="hint">(max 2 min)</span></div>
                     <button id="prodStopRec" class="btn btn-danger btn-lg btn-stop">Stop Recording</button>
@@ -871,6 +1223,18 @@ function renderActionArea() {
                 await nextState({ force: true });
             } catch (err) {
                 area.innerHTML = `<p class="status-bad">Recording failed: ${escapeHTML(err.message)}</p>`;
+            } finally {
+                setBusy(false);
+            }
+        });
+        area.querySelector("#prodSkipRecord").addEventListener("click", async () => {
+            if (busy) return;
+            setBusy(true);
+            try {
+                const recordingState = state;
+                runtime.transcripts.push({ label: recordingState, transcript: "", skipped: true });
+                saveElpPatch(buildSkippedRecordingPatch(recordingState));
+                await nextState({ force: true });
             } finally {
                 setBusy(false);
             }
@@ -1422,11 +1786,12 @@ async function buildPart2Story(label, options = {}) {
     const fallbackSegments = [
         { role: "NARRATOR", text: label === "sub1"
             ? "Boarding starts, ATC flow restrictions apply, and crew manages minor technical note before pushback."
-            : "Continuation: the same flight now faces a non-standard event with weather and cabin pressure, requiring coordinated emergency handling." }
+            : "Continuation: the same flight now faces a non-standard operational event requiring calm, coordinated handling." }
     ];
     let segments = fallbackSegments;
     let pinpoints = runtime.pinpoints[label];
     let topicPinpoints = deriveTopicPinpoints(pinpoints, fallbackSegments);
+    const scenario = getCurrentPart2Scenario();
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const previousTopics = label === "sub1" ? collectPreviousPart2TopicPinpoints(40) : [];
     const previousTopicBlock = previousTopics.length
@@ -1441,7 +1806,13 @@ async function buildPart2Story(label, options = {}) {
         try {
             const prompt = label === "sub1"
                 ? `Write Part 1 of one continuous aviation fiction story for ELP listening practice (story ${label}).
-Part 1 should take approximately 4-7 minutes when spoken aloud.
+Part 1 must take no more than 2 minutes when spoken aloud. Aim for about 90-120 seconds.
+
+SCENARIO BRIEF:
+- Primary scenario: ${scenario.title}
+- Scenario guidance: ${scenario.part1Brief}
+- Keep this scenario as the main driver of events.
+- Do not make thunderstorms, turbulence, windshear, icing, or general bad weather the main problem unless explicitly required by the scenario brief.
 
 OUTPUT FORMAT - return strict JSON only:
 {
@@ -1466,6 +1837,8 @@ SEGMENT RULES:
 - speaker.gender must be one of: male, female (for narrator use the most natural voice for that narrator persona).
 - Keep each speaker's role/gender/name consistent throughout the story.
 - One segment = one speaking turn. Do not list multiple speakers in a single segment.
+- Target 10-14 segments total.
+- Keep each segment brief. Most segments should be one short sentence; only a few may use two short sentences when operationally necessary.
 - Do NOT use AMBIENT or sound-effect roles.
 - Do NOT put role prefixes inside the text - the speaker object handles that metadata.
 - All segments are spoken dialogue or narration.
@@ -1479,6 +1852,7 @@ DIALOGUE:
 - ATC transmissions use realistic phraseology: callsigns, headings, altitudes, readbacks. Short, clipped, professional.
 - At least one cabin crew member has a moment beyond announcements.
 - At least one passenger perspective anchors the cabin side.
+- Keep the pacing tight and avoid extended monologues.
 
 REALISM:
 Include proper aviation terminology: callsigns, flight levels, squawk codes, STAR/SID names, runway designators, standard ATC phrases, checklists, CRM dialogue.
@@ -1497,7 +1871,13 @@ AVOID TOPIC OVERLAP WITH PREVIOUS STORIES:
 ${previousTopicBlock}
 Do not reuse these same themes/topics unless absolutely required for realism.`
                 : `Write Part 2 as a direct continuation of the SAME story and SAME flight from Part 1 (story ${label}).
-Part 2 should take approximately 4-7 minutes when spoken aloud.
+Part 2 must take no more than 2 minutes when spoken aloud. Aim for about 90-120 seconds.
+
+SCENARIO BRIEF:
+- Primary scenario: ${scenario.title}
+- Continuation guidance: ${scenario.part2Brief}
+- Keep this same scenario as the main driver of Part 2.
+- Do not replace it with thunderstorms, turbulence, windshear, icing, or a generic weather diversion unless explicitly required by the scenario brief.
 
 Part 1 script (maintain continuity of timeline, names, aircraft context, and unresolved threads):
 ${runtime.story.sub1?.script || "N/A"}
@@ -1528,6 +1908,8 @@ SEGMENT RULES:
 - speaker.gender must be one of: male, female (for narrator use the most natural voice for that narrator persona).
 - Keep each speaker's role/gender/name consistent throughout the story.
 - One segment = one speaking turn. Do not list multiple speakers in a single segment.
+- Target 10-14 segments total.
+- Keep each segment brief. Most segments should be one short sentence; only a few may use two short sentences when operationally necessary.
 - Do NOT use AMBIENT or sound-effect roles.
 - Do NOT put role prefixes inside the text - the speaker object handles that metadata.
 - All segments are spoken dialogue or narration.
@@ -1538,6 +1920,7 @@ PART 2 REQUIREMENTS:
 - Preserve speaker names and role behavior from Part 1.
 - Keep ATC phraseology realistic and concise.
 - Show CRM decisions, threat/risk assessment, communication quality, and final resolution path.
+- Keep the pacing tight and avoid extended monologues.
 
 PINPOINTS:
 - "pinpoints": 8-15 short checkpoints focused on non-standard/emergency progression and handling outcomes.
@@ -1798,6 +2181,7 @@ async function buildPart3Set(setKey) {
     const anthropicKey = settings.apiKeys.anthropic;
     const elevenKey = settings.apiKeys.elevenlabs;
     let clips = fallbackPart3Set(setKey);
+    const selectedThemes = getCurrentPart3Themes(setKey);
 
     if (anthropicKey) {
         try {
@@ -1830,7 +2214,15 @@ Global rules:
 
 Set: ${setKey}
 Set-specific format:
-${part3SpecForSet(setKey)}`;
+${part3SpecForSet(setKey)}
+
+Required clip themes:
+1. ${selectedThemes[0] || "operational coordination"}
+2. ${selectedThemes[1] || "crew communication"}
+3. ${selectedThemes[2] || "ATC or dispatch interaction"}
+
+Use each required theme exactly once as the main focus of one clip.
+Do not default to thunderstorms, turbulence, windshear, icing, or generic bad-weather complications unless one of the required themes explicitly demands it.`;
 
             const text = await askClaude({
                 apiKey: anthropicKey,
@@ -2085,6 +2477,16 @@ async function recordAndTranscribe(label) {
 }
 
 async function analyzePart2(label, transcript) {
+    const skipped = (label === "sub1" && getTodayElp()?.part2Sub1RecordingSkipped === true)
+        || (label === "sub2" && getTodayElp()?.part2Sub2RecordingSkipped === true);
+    if (skipped) {
+        return {
+            covered: [],
+            missed: [],
+            followUps: buildGenericPart2Followups(label),
+            skippedRecording: true
+        };
+    }
     const anthropicKey = getSettings().apiKeys.anthropic;
     if (!anthropicKey) return { covered: [], missed: runtime.pinpoints[label], followUps: ["Summarize the sequence of events again with operational priorities."] };
     try {
@@ -2213,10 +2615,13 @@ async function runCurrentState(options = {}) {
                 if (executeDevAction) {
                     await recordCurrentDevAnswer();
                 } else {
-                    renderMain(renderTranscriptPrompt("Sub-part 1 Description", transcript, "Use the developer Record button to capture this response."));
+                    const hint = wasRecordingSkippedForState(state)
+                        ? "Recording was skipped for this response. Generic story-based follow-up questions will be used."
+                        : "Use the developer Record button to capture this response.";
+                    renderMain(renderTranscriptPrompt("Sub-part 1 Description", transcript, hint));
                 }
             } else {
-                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
+                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer, or skip recording and continue with generic follow-up questions.</p>`);
             }
             break;
         }
@@ -2228,10 +2633,13 @@ async function runCurrentState(options = {}) {
                     break;
                 }
             }
-            const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const transcript = getTodayElp()?.part2Sub1Transcript || getTodayElp()?.lastTranscript?.transcript || "";
+            const skipped = getTodayElp()?.part2Sub1RecordingSkipped === true;
+            const loader = skipped
+                ? null
+                : createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const analysis = await analyzePart2("sub1", transcript);
-            loader.remove();
+            loader?.remove();
             if (isDev) {
                 renderMain(renderAnalysisDetails("Sub-part 1 Pinpoint Analysis", analysis, "No analysis result."));
             }
@@ -2249,7 +2657,10 @@ async function runCurrentState(options = {}) {
                 renderMain(`<h3>Sub-part 1 Follow-up Questions</h3><ul>${follow.map((q) => `<li>${escapeHTML(q)}</li>`).join("")}</ul>`);
             } else {
                 if (follow.length) {
-                    renderMain(`<h3>Follow-up Questions</h3>${renderQuestionList(follow)}`);
+                    const intro = getTodayElp()?.part2Sub1RecordingSkipped
+                        ? `<p class="hint">Recording was skipped, so these follow-up questions are based on the story content rather than your answer.</p>`
+                        : "";
+                    renderMain(`<h3>Follow-up Questions</h3>${intro}${renderQuestionList(follow)}`);
                 } else {
                     renderMain(`<h3>Follow-up Questions</h3><p>No additional follow-up needed. Well done!</p>`);
                 }
@@ -2301,10 +2712,13 @@ async function runCurrentState(options = {}) {
                 if (executeDevAction) {
                     await recordCurrentDevAnswer();
                 } else {
-                    renderMain(renderTranscriptPrompt("Sub-part 2 Description", transcript, "Use the developer Record button to capture this response."));
+                    const hint = wasRecordingSkippedForState(state)
+                        ? "Recording was skipped for this response. Generic story-based follow-up questions will be used."
+                        : "Use the developer Record button to capture this response.";
+                    renderMain(renderTranscriptPrompt("Sub-part 2 Description", transcript, hint));
                 }
             } else {
-                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer.</p>`);
+                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer, or skip recording and continue with generic follow-up questions.</p>`);
             }
             break;
         }
@@ -2316,10 +2730,13 @@ async function runCurrentState(options = {}) {
                     break;
                 }
             }
-            const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const transcript = getTodayElp()?.part2Sub2Transcript || getTodayElp()?.lastTranscript?.transcript || "";
+            const skipped = getTodayElp()?.part2Sub2RecordingSkipped === true;
+            const loader = skipped
+                ? null
+                : createLoadingOverlay(root.querySelector("#elpContent"), "Analyzing your response\u2026");
             const analysis = await analyzePart2("sub2", transcript);
-            loader.remove();
+            loader?.remove();
             if (isDev) {
                 renderMain(renderAnalysisDetails("Sub-part 2 Pinpoint Analysis", analysis, "No analysis result."));
             }
@@ -2337,7 +2754,10 @@ async function runCurrentState(options = {}) {
                 renderMain(`<h3>Sub-part 2 Follow-up Questions</h3><ul>${follow.map((q) => `<li>${escapeHTML(q)}</li>`).join("")}</ul>`);
             } else {
                 if (follow.length) {
-                    renderMain(`<h3>Follow-up Questions</h3>${renderQuestionList(follow)}`);
+                    const intro = getTodayElp()?.part2Sub2RecordingSkipped
+                        ? `<p class="hint">Recording was skipped, so these follow-up questions are based on the story content rather than your answer.</p>`
+                        : "";
+                    renderMain(`<h3>Follow-up Questions</h3>${intro}${renderQuestionList(follow)}`);
                 } else {
                     renderMain(`<h3>Follow-up Questions</h3><p>No additional follow-up needed. Well done!</p>`);
                 }
@@ -2429,52 +2849,50 @@ async function runCurrentState(options = {}) {
                 if (executeDevAction) {
                     await recordCurrentDevAnswer();
                 } else {
-                    renderMain(renderTranscriptPrompt(state, transcript, "Use the developer Record button to capture this answer.", "<p>No follow-up in Part 3 by design.</p>"));
+                    const hint = wasRecordingSkippedForState(state)
+                        ? "Recording was skipped for this answer."
+                        : "Use the developer Record button to capture this answer.";
+                    renderMain(renderTranscriptPrompt(state, transcript, hint, "<p>No follow-up in Part 3 by design.</p>"));
                 }
             } else {
-                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer about what you understood.</p>`);
+                renderMain(`<h3>Describe What You Heard</h3><p>When you are ready, click the button below to start recording your answer about what you understood, or skip recording to continue.</p>`);
             }
             break;
         }
 
         case "PART4_PICTURE1": {
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Loading aviation image\u2026");
-            const picture1 = await ensurePicture("single");
+            const comparePair = await ensurePart4ComparePair();
+            const picture1 = comparePair.images[0] || await ensurePicture("single");
             const picture1Context = await getImageDescriptor(picture1, { debugContext: { tab: "elp", state: "PART4_PICTURE1" } });
             loader.remove();
             renderMain(`<h3>${isDev ? "Part 4 Picture 1" : "Study This Image"}</h3><img class="elp-picture" src="${picture1}" alt="aviation scenario">${pexelsCredit(picture1)}`);
-            saveElpPatch({ part4Picture1: picture1, part4Picture1Context: picture1Context });
+            saveElpPatch({ part4Picture1: picture1, part4Picture1Context: picture1Context, part4ComparePair: comparePair });
             break;
         }
 
         case "PART4_PICTURE2_COMPARE": {
             const loader = createLoadingOverlay(root.querySelector("#elpContent"), "Loading comparison image\u2026");
-            const picture1 = getTodayElp()?.part4Picture1 || await ensurePicture("single");
-            let picture2 = await ensurePicture("compare");
-            if (picture2 === picture1) {
-                const allCompare = await getKnownLocalImageKeys(DEFAULT_LOCAL_IMAGE_LIBRARY.compare);
-                const alternatives = allCompare.filter((src) => src !== picture1);
-                if (alternatives.length) {
-                    const verified = await Promise.all(alternatives.map(async (src) => ({ src, ok: await canLoadImage(src) })));
-                    const availableAlternatives = verified.filter((item) => item.ok).map((item) => item.src);
-                    if (availableAlternatives.length) picture2 = randomPick(availableAlternatives);
-                }
-            }
+            const comparePair = getTodayElp()?.part4ComparePair || await ensurePart4ComparePair();
+            const [pairPicture1, pairPicture2] = Array.isArray(comparePair.images) ? comparePair.images : [];
+            const picture1 = getTodayElp()?.part4Picture1 || pairPicture1 || await ensurePicture("single");
+            let picture2 = pairPicture2 || await ensurePicture("compare");
             const [picture1Context, picture2Context] = await Promise.all([
                 getImageDescriptor(picture1, { debugContext: { tab: "elp", state: "PART4_PICTURE2_COMPARE", role: "picture1" } }),
                 getImageDescriptor(picture2, { debugContext: { tab: "elp", state: "PART4_PICTURE2_COMPARE", role: "picture2" } })
             ]);
             loader.remove();
             if (isDev) {
-                renderMain(`<h3>Part 4 Compare</h3><div class="elp-controls"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}<p>Describe similarities and differences in operational context.</p>`);
+                renderMain(`<h3>Part 4 Compare</h3><div class="elp-controls"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}<p>Describe similarities and differences in operational context.</p><p class="hint">Pair theme: ${escapeHTML(comparePair.theme || "matched operational comparison")}</p>`);
             } else {
-                renderMain(`<h3>Compare These Two Scenes</h3><div class="elp-compare"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}`);
+                renderMain(`<h3>Compare These Two Scenes</h3><div class="elp-compare"><img class="elp-picture" src="${picture1}" alt="picture 1"><img class="elp-picture" src="${picture2}" alt="picture 2"></div>${pexelsCredit(picture1)}${pexelsCredit(picture2)}<p class="hint">These images are chosen as a matched comparison set.</p>`);
             }
             saveElpPatch({
                 part4Picture1: picture1,
                 part4Picture2: picture2,
                 part4Picture1Context: picture1Context,
-                part4Picture2Context: picture2Context
+                part4Picture2Context: picture2Context,
+                part4ComparePair: comparePair
             });
             break;
         }

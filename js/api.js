@@ -208,15 +208,15 @@ const PEXELS_SEARCH_QUERIES = [
     "commercial aircraft taxiway"
 ];
 
-export async function searchPexels({ apiKey, exclude = [], debugContext = {} }) {
+export async function searchPexels({ apiKey, exclude = [], query, page, perPage = 15, debugContext = {} }) {
     if (!apiKey) throw new Error("Pexels API key is missing.");
 
-    const query = PEXELS_SEARCH_QUERIES[Math.floor(Math.random() * PEXELS_SEARCH_QUERIES.length)];
-    const page = Math.floor(Math.random() * 10) + 1;
+    const chosenQuery = query || PEXELS_SEARCH_QUERIES[Math.floor(Math.random() * PEXELS_SEARCH_QUERIES.length)];
+    const chosenPage = Number.isInteger(page) ? page : (Math.floor(Math.random() * 10) + 1);
 
-    debugLog("api.searchPexels", "Searching Pexels", { ...debugContext, query, page });
+    debugLog("api.searchPexels", "Searching Pexels", { ...debugContext, query: chosenQuery, page: chosenPage, perPage });
 
-    const url = `${PEXELS_SEARCH_ENDPOINT}?query=${encodeURIComponent(query)}&per_page=15&page=${page}&orientation=landscape`;
+    const url = `${PEXELS_SEARCH_ENDPOINT}?query=${encodeURIComponent(chosenQuery)}&per_page=${perPage}&page=${chosenPage}&orientation=landscape`;
     const response = await fetchWithTimeout(url, {
         method: "GET",
         headers: { Authorization: apiKey }
